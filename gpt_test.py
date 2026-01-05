@@ -2,17 +2,16 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
-batch_size = 64  # 32
-block_size = 256  # 8
+batch_size = 32 # 64
+block_size = 8 # 256
 max_iters = 5_000
 eval_interval = 500
-learning_rate = 3e-4 # 1e-3
+learning_rate = 1e-3 # 3e-4
 eval_iters = 200
 dropout = 0.2
-n_head = 6  # 4
-n_embed = 64 * n_head # 32
-
-
+n_head = 4  # 6
+n_embed = 32  # 64 * n_head
+vocab_size = 276 #1_000
 if torch.cuda.is_available():
     device = 'cuda'
 elif torch.backends.mps.is_available():
@@ -25,6 +24,81 @@ torch.manual_seed(1337)
 
 with open('input.txt', 'r') as f:
     text = f.read()
+
+def get_max_pair(ids):
+    counts = {}
+    max_pair = None
+    max_pair_count = 0
+    for key in zip(ids[:-1], ids[1:]):
+        count = counts.get(key, 0) + 1
+        counts[key] = count
+        if max_pair_count < count:
+            max_pair_count = count
+            max_pair = key
+    return max_pair, max_pair_count
+
+def get_stats(ids):
+    counts = {}
+    for pair in zip(ids[:-1], ids[1:]):
+        counts[pair] = counts.get(pair, 0) + 1
+    return counts
+
+def merge(ids, pair, idx):
+    new_ids = []
+    i = 0
+    while i < len(ids):
+        if i < len(ids) - 1 and pair[0] == ids[i] and pair[1] == ids[i + 1]:
+            new_ids.append(idx)
+            i += 2
+        else:
+            new_ids.append(ids[i])
+            i += 1
+    return new_ids
+
+def train_merges(toks):
+    ids = list(toks)
+    idx = 256
+    my_merges = {}  # pair => idx
+    for i in range(vocab_size - idx):
+        pair, pair_count = get_max_pair(ids)
+        print(f'merging {pair} into a new token {idx}')
+        ids = merge(ids, pair, idx=idx)
+        my_merges[pair] = idx
+        idx += 1
+
+    print(f'tokens len {len(toks)}')
+    print(f'ids len: {len(ids)}')
+    print(f'compression: {round(len(toks) / len(ids), 2)}')
+    return my_merges
+
+def decode(ids, my_merges):
+    vocab = get_vocab(my_merges)
+    toks = b''.join(vocab[i] for i in ids)
+    return toks.decode('utf-8', errors='replace')
+
+def encode(string, my_merges):
+    toks = list(string.encode('utf-8'))
+    while len(toks) > 1:
+        stats = get_stats(toks)
+        pair = min(stats, key=lambda p: my_merges.get(p, float('inf')))
+        if pair in my_merges:
+            toks = merge(toks, pair, idx=my_merges[pair])
+        else:
+            break
+    return toks
+
+def get_vocab(merges):
+    vocab = {idx: bytes([idx]) for idx in range(256)}
+    for (p0, p1), idx  in merges.items():
+        vocab[idx] = vocab[p0] + vocab[p1]
+    return vocab
+
+tokens = list([int(i) for i in text.encode('utf-8')])
+print(f'length tokens: {len(tokens)}')
+print(f'length text: {len(text)}')
+
+merges = train_merges(tokens)
+assert decode(encode(text, merges), merges)==text, 'encode decode error'
 
 chars = sorted(list(set(text)))
 vocab_size = len(chars)
@@ -174,17 +248,15 @@ class BigramLangaugeModel(nn.Module):
             idx = torch.cat((idx, idx_next), dim=1)  # (B, T+1)
         return idx
 
+
 model = BigramLangaugeModel()
 model = model.to(device)
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
-
 for iter in range(max_iters):
-
     if iter % eval_interval == 0:
         losses = estimate_loss()
         print(f"step {iter} train loss: {losses['train']:.4f}, val loss: {losses['val']:.4f}")
-
     xb, yb = get_batch('train')
     logits, loss = model(xb, yb)
     optimizer.zero_grad(set_to_none=True)
