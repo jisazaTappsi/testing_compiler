@@ -11,7 +11,7 @@ eval_iters = 200
 dropout = 0.2
 n_head = 4  # 6
 n_embed = 32  # 64 * n_head
-vocab_size =  256 #2_000
+vocab_size =  10_000 #256
 if torch.cuda.is_available():
     device = 'cuda'
 elif torch.backends.mps.is_available():
