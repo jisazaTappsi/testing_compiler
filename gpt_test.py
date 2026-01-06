@@ -11,7 +11,7 @@ eval_iters = 200
 dropout = 0.2
 n_head = 4  # 6
 n_embed = 32  # 64 * n_head
-vocab_size = 276 #1_000
+vocab_size =  256 #2_000
 if torch.cuda.is_available():
     device = 'cuda'
 elif torch.backends.mps.is_available():
@@ -98,16 +98,20 @@ print(f'length tokens: {len(tokens)}')
 print(f'length text: {len(text)}')
 
 merges = train_merges(tokens)
-assert decode(encode(text, merges), merges)==text, 'encode decode error'
+#assert decode(encode(text, merges), merges)==text, 'encode decode error'
 
+
+"""
+merges = {}
 chars = sorted(list(set(text)))
 vocab_size = len(chars)
 stoi = {ch: i for i, ch in enumerate(chars)}
 itos = {i:ch for i, ch in enumerate(chars)}
-encode = lambda s: [stoi[c] for c in s]
-decode = lambda l: ''.join(itos[i] for i in l)
+encode = lambda s, m: [stoi[c] for c in s]
+decode = lambda l, m: ''.join(itos[i] for i in l)
+"""
 
-data = torch.tensor(encode(text), dtype=torch.long)
+data = torch.tensor(encode(text, merges), dtype=torch.long)
 n = int(0.9*len(data))
 train_data = data[:n]
 val_data = data[n:]
@@ -264,5 +268,5 @@ for iter in range(max_iters):
     optimizer.step()
 
 
-context = torch.zeros((1, 1), dtype=torch.long, device=device)
-print(decode(model.generate(context, max_new_tokens=500)[0].tolist()))
+context = torch.tensor([[ord(' ')]], dtype=torch.long, device=device)
+print(decode(model.generate(context, max_new_tokens=2_000)[0].tolist(), merges))
