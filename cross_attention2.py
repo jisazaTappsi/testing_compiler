@@ -76,17 +76,18 @@ class HeadCross(nn.Module):
     def forward(self, x, x_cross=None):
         B, T, C = x.shape
         if x_cross is not None:
-            keys = self.key(x_cross)
-            queries = self.query(x_cross)
-        else:  # self attention
-            keys = self.key(x)
             queries = self.query(x)
+            keys = self.key(x_cross)
+            values = self.value(x_cross)
+        else:  # self attention
+            queries = self.query(x)
+            keys = self.key(x)
+            values = self.value(x)
 
         wei = queries @ keys.transpose(-2, -1) * C ** -0.5  # B, T, head_size @ B, head_size, T = B, T, T
         wei = F.softmax(wei, dim=-1)
         wei = self.dropout(wei)
 
-        values = self.value(x)
         return wei @ values  # (B, T, T) @ (B, T, head_size) = B, T, head_size
 
 
@@ -182,18 +183,18 @@ class BlockCross(nn.Module):
         x = x + self.masked_multi(self.ln1(x))
         x = x + self.multi(self.ln2(x), x_cross)
         x = x + self.ffwd(self.ln3(x))
-        return x
+        return x, x_cross
 
 class CrossAttentionTransformer(nn.Module):
     def __init__(self):
         super().__init__()
         # Main branch embeddings
-        self.token_embedding_table_out = nn.Embedding(num_embeddings=vocab_size, embedding_dim=n_embed)
-        self.position_embedding_table_out = nn.Embedding(num_embeddings=block_size, embedding_dim=n_embed)
+        self.emb_table = nn.Embedding(num_embeddings=vocab_size, embedding_dim=n_embed)
+        self.position_emb_table = nn.Embedding(num_embeddings=block_size, embedding_dim=n_embed)
 
         # Cross branch embeddings
-        self.token_embedding_table_in = nn.Embedding(num_embeddings=vocab_size, embedding_dim=n_embed)
-        self.position_embedding_table_in = nn.Embedding(num_embeddings=block_size, embedding_dim=n_embed)
+        self.emb_table_cross = nn.Embedding(num_embeddings=vocab_size, embedding_dim=n_embed)
+        self.position_emb_table_cross = nn.Embedding(num_embeddings=block_size, embedding_dim=n_embed)
 
         self.blocks = nn.ModuleList([
             BlockCross(n_embed, n_head=n_head),
@@ -203,25 +204,29 @@ class CrossAttentionTransformer(nn.Module):
         self.ln_final = nn.LayerNorm(n_embed)
         self.lm_head = nn.Linear(n_embed, vocab_size)
 
-    def get_embedding(self, x):
+    @staticmethod
+    def get_embedding(x, token_table, position_table):
         B, T = x.shape
-        tok_emb = self.token_embedding_table_out(x)  # (B, T, n_embed)
-        pos_emb = self.position_embedding_table_out(torch.arange(T, device=device))
+        tok_emb = token_table(x)  # (B, T, n_embed)
+        pos_emb = position_table(torch.arange(T, device=device))
         return tok_emb + pos_emb
 
     def forward(self, x, x_cross=None, y=None):
         if x_cross is None:
             x_cross = x
 
-        emb = self.get_embedding(x)
-        emb_cross = self.get_embedding(x_cross)
+        emb = CrossAttentionTransformer.get_embedding(x, token_table=self.emb_table,
+                                                      position_table=self.position_emb_table)
+        emb_cross = CrossAttentionTransformer.get_embedding(x_cross, token_table=self.emb_table_cross,
+                                                            position_table=self.position_emb_table_cross)
 
         # Manually iterate through blocks to pass both inputs
-        block_out = emb
+        x_out = emb
+        x_cross_out = emb_cross
         for block in self.blocks:
-            block_out = block(block_out, emb_cross)
-        block_out = self.ln_final(block_out)
-        logits = self.lm_head(block_out)  # (B, T, vocab_size)
+            x_out, x_cross_out = block(x_out, x_cross_out)
+
+        logits = self.lm_head(self.ln_final(x_out))  # (B, T, vocab_size)
 
         if y is None:
             loss = None
