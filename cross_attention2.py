@@ -56,11 +56,38 @@ def estimate_loss():
         losses = torch.zeros(eval_iters)
         for k in range(eval_iters):
             X, Y = get_batch(split)
-            logits, loss = model(X, Y)
+            logits, loss = model(x=X, y=Y)
             losses[k] = loss.item()
         out[split] = losses.mean()
     model.train()
     return out
+
+
+class HeadCross(nn.Module):
+    """one head self attention"""
+
+    def __init__(self, head_size):
+        super().__init__()
+        self.key = nn.Linear(n_embed, head_size, bias=False)
+        self.query = nn.Linear(n_embed, head_size, bias=False)
+        self.value = nn.Linear(n_embed, head_size, bias=False)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x, x_cross=None):
+        B, T, C = x.shape
+        if x_cross is not None:
+            keys = self.key(x_cross)
+            queries = self.query(x_cross)
+        else:  # self attention
+            keys = self.key(x)
+            queries = self.query(x)
+
+        wei = queries @ keys.transpose(-2, -1) * C ** -0.5  # B, T, head_size @ B, head_size, T = B, T, T
+        wei = F.softmax(wei, dim=-1)
+        wei = self.dropout(wei)
+
+        values = self.value(x)
+        return wei @ values  # (B, T, T) @ (B, T, head_size) = B, T, head_size
 
 
 class MaskedHead(nn.Module):
@@ -89,7 +116,20 @@ class MaskedHead(nn.Module):
         return wei @ values  # (B, T, T) @ (B, T, head_size) = B, T, head_size
 
 
-class MaskedMultiHeadAttention(nn.Module):
+class MultiAttention(nn.Module):
+    def __init__(self, num_heads, head_size):
+        super().__init__()
+        self.heads = nn.ModuleList([HeadCross(head_size) for _ in range(num_heads)])
+        self.proj = nn.Linear(n_embed, n_embed)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x, x_cross=None):
+        out = torch.cat([h(x, x_cross) for h in self.heads], dim=-1)
+        out = self.dropout(self.proj(out))
+        return out
+
+
+class MaskedMultiAttention(nn.Module):
     def __init__(self, num_heads, head_size):
         super().__init__()
         self.heads = nn.ModuleList([MaskedHead(head_size) for _ in range(num_heads)])
@@ -116,39 +156,71 @@ class FeedForward(nn.Module):
         return self.net(x)
 
 
-class Block(nn.Module):
+class BlockCross(nn.Module):
     def __init__(self, n_embed, n_head):
         super().__init__()
-        self.masked_multi = MaskedMultiHeadAttention(n_head, head_size=n_embed//n_head)
-        self.ffwd = FeedForward(n_embed)
         self.ln1 = nn.LayerNorm(n_embed)
+        self.masked_multi = MaskedMultiAttention(n_head, head_size=n_embed//n_head)
         self.ln2 = nn.LayerNorm(n_embed)
+        self.multi = MultiAttention(n_head, head_size=n_embed//n_head)
+        self.ln3 = nn.LayerNorm(n_embed)
+        self.ffwd = FeedForward(n_embed)
 
-    def forward(self, x):
+        self.ln1_cross = nn.LayerNorm(n_embed)
+        self.multi_cross = MultiAttention(n_head, head_size=n_embed//n_head)
+        self.ln2_cross = nn.LayerNorm(n_embed)
+        self.ffwd_cross = FeedForward(n_embed)
+
+    def forward(self, x, x_cross=None):
+        if x_cross is not None:
+            # Self-attention on x_cross (pass only one arg, so x_cross=None in HeadCross)
+            x_cross = x_cross + self.multi_cross(self.ln1_cross(x_cross))
+            x_cross = x_cross + self.ffwd_cross(self.ln2_cross(x_cross))
+        else:  # self attention
+            x_cross = x
+
         x = x + self.masked_multi(self.ln1(x))
-        x = x + self.ffwd(self.ln2(x))
+        x = x + self.multi(self.ln2(x), x_cross)
+        x = x + self.ffwd(self.ln3(x))
         return x
 
-class Transformer(nn.Module):
+class CrossAttentionTransformer(nn.Module):
     def __init__(self):
         super().__init__()
-        self.token_embedding_table = nn.Embedding(num_embeddings=vocab_size, embedding_dim=n_embed)
-        self.position_embedding_table = nn.Embedding(num_embeddings=block_size, embedding_dim=n_embed)
-        self.blocks = nn.Sequential(
-            Block(n_embed, n_head=n_head),
-            Block(n_embed, n_head=n_head),
-            Block(n_embed, n_head=n_head),
-            nn.LayerNorm(n_embed),
-        )
+        # Main branch embeddings
+        self.token_embedding_table_out = nn.Embedding(num_embeddings=vocab_size, embedding_dim=n_embed)
+        self.position_embedding_table_out = nn.Embedding(num_embeddings=block_size, embedding_dim=n_embed)
+
+        # Cross branch embeddings
+        self.token_embedding_table_in = nn.Embedding(num_embeddings=vocab_size, embedding_dim=n_embed)
+        self.position_embedding_table_in = nn.Embedding(num_embeddings=block_size, embedding_dim=n_embed)
+
+        self.blocks = nn.ModuleList([
+            BlockCross(n_embed, n_head=n_head),
+            BlockCross(n_embed, n_head=n_head),
+            BlockCross(n_embed, n_head=n_head),
+        ])
+        self.ln_final = nn.LayerNorm(n_embed)
         self.lm_head = nn.Linear(n_embed, vocab_size)
 
-    def forward(self, x, y=None):
+    def get_embedding(self, x):
         B, T = x.shape
+        tok_emb = self.token_embedding_table_out(x)  # (B, T, n_embed)
+        pos_emb = self.position_embedding_table_out(torch.arange(T, device=device))
+        return tok_emb + pos_emb
 
-        tok_emb = self.token_embedding_table(x)  # (B, T, n_embed)
-        pos_emb = self.position_embedding_table(torch.arange(T, device=device))
-        emb_out = tok_emb + pos_emb
-        block_out = self.blocks(emb_out)
+    def forward(self, x, x_cross=None, y=None):
+        if x_cross is None:
+            x_cross = x
+
+        emb = self.get_embedding(x)
+        emb_cross = self.get_embedding(x_cross)
+
+        # Manually iterate through blocks to pass both inputs
+        block_out = emb
+        for block in self.blocks:
+            block_out = block(block_out, emb_cross)
+        block_out = self.ln_final(block_out)
         logits = self.lm_head(block_out)  # (B, T, vocab_size)
 
         if y is None:
@@ -161,18 +233,24 @@ class Transformer(nn.Module):
 
         return logits, loss
 
-    def generate(self, x, max_new_tokens):
+    def generate(self, x, x_cross=None, max_new_tokens=100):
+        # If no cross input provided, use the same as main input
+        if x_cross is None:
+            x_cross = x
+
         for _ in range(max_new_tokens):
-            window = x[:, -block_size:]
-            logits, loss = self(window)
+            x_window = x[:, -block_size:]
+            x_cross_window = x_cross[:, -block_size:]
+            logits, loss = self(x=x_window, x_cross=x_cross_window)
             logits = logits[:, -1, :]  # last element in T dim (B, C)
             probs = F.softmax(logits, dim=-1)
             x_next = torch.multinomial(probs, num_samples=1)  # (B, 1)
             x = torch.cat((x, x_next), dim=1)  # (B, T+1)
+            x_cross = torch.cat((x_cross, x_next), dim=1)  # (B, T+1)
         return x
 
 
-model = Transformer()
+model = CrossAttentionTransformer()
 model = model.to(device)
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
@@ -181,7 +259,7 @@ for iter in range(max_iters):
         losses = estimate_loss()
         print(f"step {iter} train loss: {losses['train']:.4f}, val loss: {losses['val']:.4f}")
     xb, yb = get_batch('train')
-    logits, loss = model(xb, yb)
+    logits, loss = model(x=xb, y=yb)
     optimizer.zero_grad(set_to_none=True)
     loss.backward()
     optimizer.step()
