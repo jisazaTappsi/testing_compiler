@@ -6,20 +6,18 @@ from torch.nn import functional as F
 import bpa
 
 batch_size = 32 # 64
-block_size = 16 # 256
-max_iters = 5_000
+block_size = 256 # 8
+max_iters = 2_000
 eval_interval = 500
 learning_rate = 1e-3 # 3e-4
 eval_iters = 200
 dropout = 0.2
 n_head = 4  # 6
-n_embed = 64  # 64 * n_head
-vocab_size =  256 # 10_000
-en_vocab_size = 500  # Source (English) vocabulary size
-fr_vocab_size = 500  # Target (French) vocabulary size
-max_pairs = 10_000
+n_embed = 64 * n_head  #
 train_split_ratio = 0.8
-type = 'cross-attention'#'self-attention'
+model_type = 'cross-attention'#'self-attention'
+max_pairs = 40_000
+EOF = {'in': None, 'out': None}
 if torch.cuda.is_available():
     device = 'cuda'
 elif torch.backends.mps.is_available():
@@ -42,7 +40,7 @@ def get_self_attention_batch(my_data):
 
 def get_cross_attention_batch(my_data):
     """my_data is a two dimension stacked pair tensor"""
-    random_sample_indexes = torch.randint(len(my_data) - 1, (batch_size,))
+    random_sample_indexes = torch.randint(len(my_data), (batch_size,))
     x_out = torch.stack([torch.tensor(my_data[i]['x_out'][:block_size]) for i in random_sample_indexes])
     x_in = torch.stack([torch.tensor(my_data[i]['x_in'][:block_size]) for i in random_sample_indexes])
     y = torch.stack([torch.tensor(my_data[i]['x_out'][1:block_size+1]) for i in random_sample_indexes])
@@ -51,9 +49,9 @@ def get_cross_attention_batch(my_data):
 
 
 def get_batch(my_data):
-    if type == 'self-attention':
+    if model_type == 'self-attention':
         return get_self_attention_batch(my_data)
-    elif type == 'cross-attention':
+    elif model_type == 'cross-attention':
         return get_cross_attention_batch(my_data)
     else:
         raise ValueError('Unknown type')
@@ -201,11 +199,11 @@ class CrossAttentionTransformer(nn.Module):
     def __init__(self):
         super().__init__()
         # Main branch embeddings
-        self.emb_table = nn.Embedding(num_embeddings=vocab_size, embedding_dim=n_embed)
+        self.emb_table = nn.Embedding(num_embeddings=bpa.out_vocab_size, embedding_dim=n_embed)
         self.position_emb_table = nn.Embedding(num_embeddings=block_size, embedding_dim=n_embed)
 
         # Cross branch embeddings
-        self.emb_table_cross = nn.Embedding(num_embeddings=vocab_size, embedding_dim=n_embed)
+        self.emb_table_cross = nn.Embedding(num_embeddings=bpa.in_vocab_size, embedding_dim=n_embed)
         self.position_emb_table_cross = nn.Embedding(num_embeddings=block_size, embedding_dim=n_embed)
 
         self.blocks = nn.ModuleList([
@@ -214,7 +212,7 @@ class CrossAttentionTransformer(nn.Module):
             BlockCross(n_embed, n_head=n_head),
         ])
         self.ln_final = nn.LayerNorm(n_embed)
-        self.lm_head = nn.Linear(n_embed, vocab_size)
+        self.lm_head = nn.Linear(n_embed, bpa.out_vocab_size)
 
     @staticmethod
     def get_embedding(x, token_table, position_table):
@@ -251,19 +249,18 @@ class CrossAttentionTransformer(nn.Module):
         return logits, loss
 
     def generate(self, x_out, x_in=None, max_new_tokens=100):
-        # If no cross input provided, use the same as main input
-        if x_in is None:
-            x_in = x_out
-
-        for _ in range(max_new_tokens):
-            x_window = x_out[:, -block_size:]
-            x_in_window = x_in[:, -block_size:]
-            logits, loss = self(x_out=x_window, x_in=x_in_window)
-            logits = logits[:, -1, :]  # last element in T dim (B, C)
-            probs = F.softmax(logits, dim=-1)
-            x_next = torch.multinomial(probs, num_samples=1)  # (B, 1)
-            x_out = torch.cat((x_out, x_next), dim=1)  # (B, T+1)
-            x_in = torch.cat((x_in, x_next), dim=1)  # (B, T+1)
+        self.eval()
+        with torch.no_grad():
+            for _ in range(max_new_tokens):
+                x_window = x_out[:, -block_size:]
+                logits, loss = self(x_out=x_window, x_in=x_in)
+                logits = logits[:, -1, :]  # last element in T dim (B, C)
+                probs = F.softmax(logits, dim=-1)
+                x_next = torch.multinomial(probs, num_samples=1)  # (B, 1)
+                if EOF['out'] is not None and (x_next.item() == EOF['out']):
+                    break
+                x_out = torch.cat((x_out, x_next), dim=1)  # (B, T+1)
+        self.train()
         return x_out
 
 
@@ -277,23 +274,24 @@ def get_cross_attention_data():
         en_text = ' '.join(en_sentences)
         fr_text = ' '.join(fr_sentences)
 
-    en_tokens = list[int]([int(i) for i in en_text.encode('utf-8')])
-    fr_tokens = list[int]([int(i) for i in fr_text.encode('utf-8')])
+    en_tokens = [int(i) for i in en_text.encode('utf-8')]
+    fr_tokens = [int(i) for i in fr_text.encode('utf-8')]
     print(f'English tokens length: {len(en_tokens)}')
     print(f'French tokens length: {len(fr_tokens)}')
 
-    en_merges = bpa.train_merges(en_tokens, target_vocab_size=en_vocab_size)
-    fr_merges = bpa.train_merges(fr_tokens, target_vocab_size=fr_vocab_size)
+    in_merges, out_merges = bpa.get_merges()
+    global EOF
+    EOF = {'in': max(in_merges.values()), 'out': max(out_merges.values())}
 
     # Prepare translation pairs data
     translation_pairs = []
     cut_size = block_size + 1  # 1 more token to divide it between x and y upstream on the get_batch method.
     for en_sent, fr_sent in zip(en_sentences, fr_sentences):
-        en_encoded = bpa.encode(en_sent, en_merges)
-        fr_encoded = bpa.encode(fr_sent, fr_merges)
+        en_encoded = bpa.encode(en_sent, in_merges)
+        fr_encoded = bpa.encode(fr_sent, out_merges)
         # Truncate/pad to block_size
-        en_encoded = en_encoded[:cut_size] + [0] * max(0, cut_size - len(en_encoded))
-        fr_encoded = fr_encoded[:cut_size] + [0] * max(0, cut_size - len(fr_encoded))
+        en_encoded = en_encoded[:cut_size] + [EOF['in']] * max(0, cut_size - len(en_encoded))
+        fr_encoded = fr_encoded[:cut_size] + [EOF['out']] * max(0, cut_size - len(fr_encoded))
         translation_pairs.append({'x_in': en_encoded, 'x_out': fr_encoded})
 
     # Split into train and validation - use 80/20 split for more training data
@@ -301,7 +299,6 @@ def get_cross_attention_data():
 
     train_pairs = translation_pairs[:n]
     val_pairs = translation_pairs[n:]
-    out_merges = fr_merges
     print(f'Training pairs: {len(train_pairs)}, Validation pairs: {len(val_pairs)}')
     return {
         'train': train_pairs,
@@ -317,7 +314,7 @@ def get_self_attention_data():
     print(f'length tokens: {len(tokens)}')
     print(f'length text: {len(text)}')
 
-    merges = bpa.train_merges(tokens, vocab_size)
+    merges = bpa.train_merges(tokens, bpa.out_vocab_size)
 
     # Justa a long 1 d tensor. bah!
     encoded_data = torch.tensor(bpa.encode(text, merges), dtype=torch.long)
@@ -329,12 +326,12 @@ def get_self_attention_data():
 
 
 def get_data_and_merges():
-    if type == 'self-attention':
+    if model_type == 'self-attention':
         return get_self_attention_data()
-    elif type == 'cross-attention':
+    elif model_type == 'cross-attention':
         return get_cross_attention_data()
     else:
-        raise Exception(f'Unknown type {type}')
+        raise Exception(f'Unknown type {model_type}')
 
 
 data, out_merges = get_data_and_merges()
@@ -353,6 +350,13 @@ for iter in range(max_iters):
     loss.backward()
     optimizer.step()
 
-
-context = torch.tensor([[ord(' ')]], dtype=torch.long, device=device)
-print(bpa.decode(model.generate(context, max_new_tokens=2_000)[0].tolist(), out_merges))
+if model_type == 'self-attention':
+    context = torch.tensor([[ord(' ')]], dtype=torch.long, device=device)
+    print(bpa.decode(model.generate(context, max_new_tokens=2_000)[0].tolist(), out_merges))
+elif model_type == 'cross-attention':
+    for idx in torch.randint(len(data['val']), (20, )):
+        context = torch.tensor([[ord(' ')]], dtype=torch.long, device=device)
+        print(bpa.decode(model.generate(x_out=context,
+                                        x_in=torch.tensor([data['val'][idx]['x_in']],
+                                                          dtype=torch.long, device=device),
+                                        max_new_tokens=400)[0].tolist(), out_merges))

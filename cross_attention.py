@@ -32,7 +32,7 @@ torch.manual_seed(1337)
 # Load translation pairs separately - use more data to reduce overfitting
 with open('en_fr_translation.csv', mode='r', newline='') as csv_file:
     translation_corpus = csv.reader(csv_file, delimiter=',')
-    rows = list(translation_corpus)[1:max_pairs]
+    rows = list(translation_corpus)[1:bpa.max_pairs]
     en_sentences = [row[0] for row in rows if len(row) >= 2]
     fr_sentences = [row[1] for row in rows if len(row) >= 2]
     
