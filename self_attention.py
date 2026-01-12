@@ -21,23 +21,8 @@ elif torch.backends.mps.is_available():
 else:
     device = 'cpu'
 
-
 torch.manual_seed(1337)
 
-with open('shakespear.txt', 'r') as f:
-    text = f.read()
-
-tokens = list([int(i) for i in text.encode('utf-8')])
-print(f'length tokens: {len(tokens)}')
-print(f'length text: {len(text)}')
-
-merges = bpa.train_merges(tokens, vocab_size)
-
-
-data = torch.tensor(bpa.encode(text, merges), dtype=torch.long)
-n = int(0.9*len(data))
-train_data = data[:n]  # justa a long 1 d tensor. bah!
-val_data = data[n:]
 
 def get_batch(split):
     data = train_data if split == 'train' else val_data
@@ -129,6 +114,7 @@ class Block(nn.Module):
         x = x + self.ffwd(self.ln2(x))
         return x
 
+
 class Transformer(nn.Module):
     def __init__(self):
         super().__init__()
@@ -171,6 +157,20 @@ class Transformer(nn.Module):
             x = torch.cat((x, x_next), dim=1)  # (B, T+1)
         return x
 
+
+with open('shakespear.txt', 'r') as f:
+    text = f.read()
+
+tokens = list([int(i) for i in text.encode('utf-8')])
+print(f'length tokens: {len(tokens)}')
+print(f'length text: {len(text)}')
+
+merges = bpa.train_merges(tokens, vocab_size)
+
+data = torch.tensor(bpa.encode(text, merges), dtype=torch.long)
+n = int(0.9*len(data))
+train_data = data[:n]  # justa a long 1 d tensor. bah!
+val_data = data[n:]
 
 model = Transformer()
 model = model.to(device)

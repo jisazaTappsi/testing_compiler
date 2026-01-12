@@ -1,3 +1,4 @@
+import csv
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
@@ -5,8 +6,8 @@ from torch.nn import functional as F
 import bpa
 
 batch_size = 32 # 64
-block_size = 8 # 256
-max_iters = 1_000
+block_size = 16 # 256
+max_iters = 5_000
 eval_interval = 500
 learning_rate = 1e-3 # 3e-4
 eval_iters = 200
@@ -14,6 +15,11 @@ dropout = 0.2
 n_head = 4  # 6
 n_embed = 64  # 64 * n_head
 vocab_size =  256 # 10_000
+en_vocab_size = 500  # Source (English) vocabulary size
+fr_vocab_size = 500  # Target (French) vocabulary size
+max_pairs = 10_000
+train_split_ratio = 0.8
+type = 'cross-attention'#'self-attention'
 if torch.cuda.is_available():
     device = 'cuda'
 elif torch.backends.mps.is_available():
@@ -24,39 +30,44 @@ else:
 
 torch.manual_seed(1337)
 
-with open('shakespear.txt', 'r') as f:
-    text = f.read()
 
-tokens = list([int(i) for i in text.encode('utf-8')])
-print(f'length tokens: {len(tokens)}')
-print(f'length text: {len(text)}')
+def get_self_attention_batch(my_data):
+    """my_data is a single dimension very long tensor"""
+    random_sample_indexes = torch.randint(len(my_data) - block_size, (batch_size,))
+    x_out = torch.stack([my_data[i:i+block_size] for i in random_sample_indexes])
+    y = torch.stack([my_data[i+1:i+block_size+1] for i in random_sample_indexes])
+    x_out, y = x_out.to(device), y.to(device)
+    return {'x_out': x_out, 'y': y}
 
-merges = bpa.train_merges(tokens, vocab_size)
+
+def get_cross_attention_batch(my_data):
+    """my_data is a two dimension stacked pair tensor"""
+    random_sample_indexes = torch.randint(len(my_data) - 1, (batch_size,))
+    x_out = torch.stack([torch.tensor(my_data[i]['x_out'][:block_size]) for i in random_sample_indexes])
+    x_in = torch.stack([torch.tensor(my_data[i]['x_in'][:block_size]) for i in random_sample_indexes])
+    y = torch.stack([torch.tensor(my_data[i]['x_out'][1:block_size+1]) for i in random_sample_indexes])
+    x_out, x_in, y = x_out.to(device), x_in.to(device), y.to(device)
+    return {'x_out': x_out, 'x_in': x_in, 'y': y}
 
 
-data = torch.tensor(bpa.encode(text, merges), dtype=torch.long)
-n = int(0.9*len(data))
-train_data = data[:n]  # justa a long 1 d tensor. bah!
-val_data = data[n:]
-
-def get_batch(split):
-    data = train_data if split == 'train' else val_data
-    random_sample_indexes = torch.randint(len(data) - block_size, (batch_size,))
-    x = torch.stack([data[i:i+block_size] for i in random_sample_indexes])
-    y = torch.stack([data[i+1:i+block_size+1] for i in random_sample_indexes])
-    x, y = x.to(device), y.to(device)
-    return x, y
+def get_batch(my_data):
+    if type == 'self-attention':
+        return get_self_attention_batch(my_data)
+    elif type == 'cross-attention':
+        return get_cross_attention_batch(my_data)
+    else:
+        raise ValueError('Unknown type')
 
 
 @torch.no_grad()
-def estimate_loss():
+def estimate_loss(my_data):
     out = {}
     model.eval()
-    for split in ['train', 'val']:
+    for split, data_tensor in my_data.items():
         losses = torch.zeros(eval_iters)
         for k in range(eval_iters):
-            X, Y = get_batch(split)
-            logits, loss = model(x=X, y=Y)
+            batch_dict = get_batch(data_tensor)
+            logits, loss = model(**batch_dict)
             losses[k] = loss.item()
         out[split] = losses.mean()
     model.train()
@@ -73,16 +84,16 @@ class HeadCross(nn.Module):
         self.value = nn.Linear(n_embed, head_size, bias=False)
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, x, x_cross=None):
-        B, T, C = x.shape
-        if x_cross is not None:
-            queries = self.query(x)
-            keys = self.key(x_cross)
-            values = self.value(x_cross)
+    def forward(self, x_out, x_in=None):
+        B, T, C = x_out.shape
+        if x_in is not None:
+            queries = self.query(x_out)
+            keys = self.key(x_in)
+            values = self.value(x_in)
         else:  # self attention
-            queries = self.query(x)
-            keys = self.key(x)
-            values = self.value(x)
+            queries = self.query(x_out)
+            keys = self.key(x_out)
+            values = self.value(x_out)
 
         wei = queries @ keys.transpose(-2, -1) * C ** -0.5  # B, T, head_size @ B, head_size, T = B, T, T
         wei = F.softmax(wei, dim=-1)
@@ -103,17 +114,17 @@ class MaskedHead(nn.Module):
                              torch.tril(torch.ones(block_size, block_size)))
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, x):
-        B, T, C = x.shape
-        keys = self.key(x)
-        queries = self.query(x)
+    def forward(self, x_out):
+        B, T, C = x_out.shape
+        keys = self.key(x_out)
+        queries = self.query(x_out)
 
         wei = queries @ keys.transpose(-2, -1) * C ** -0.5  # B, T, head_size @ B, head_size, T = B, T, T
         wei = wei.masked_fill(self.tril[:T, :T] == 0, float("-inf"))  # B, T, T
         wei = F.softmax(wei, dim=-1)
         wei = self.dropout(wei)
 
-        values = self.value(x)
+        values = self.value(x_out)
         return wei @ values  # (B, T, T) @ (B, T, head_size) = B, T, head_size
 
 
@@ -124,8 +135,8 @@ class MultiAttention(nn.Module):
         self.proj = nn.Linear(n_embed, n_embed)
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, x, x_cross=None):
-        out = torch.cat([h(x, x_cross) for h in self.heads], dim=-1)
+    def forward(self, x_out, x_in=None):
+        out = torch.cat([h(x_out, x_in) for h in self.heads], dim=-1)
         out = self.dropout(self.proj(out))
         return out
 
@@ -137,8 +148,8 @@ class MaskedMultiAttention(nn.Module):
         self.proj = nn.Linear(n_embed, n_embed)
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, x):
-        out = torch.cat([h(x) for h in self.heads], dim=-1)
+    def forward(self, x_out):
+        out = torch.cat([h(x_out) for h in self.heads], dim=-1)
         out = self.dropout(self.proj(out))
         return out
 
@@ -153,8 +164,8 @@ class FeedForward(nn.Module):
             nn.Dropout(dropout),
         )
 
-    def forward(self, x):
-        return self.net(x)
+    def forward(self, x_out):
+        return self.net(x_out)
 
 
 class BlockCross(nn.Module):
@@ -172,18 +183,19 @@ class BlockCross(nn.Module):
         self.ln2_cross = nn.LayerNorm(n_embed)
         self.ffwd_cross = FeedForward(n_embed)
 
-    def forward(self, x, x_cross=None):
-        if x_cross is not None:
-            # Self-attention on x_cross (pass only one arg, so x_cross=None in HeadCross)
-            x_cross = x_cross + self.multi_cross(self.ln1_cross(x_cross))
-            x_cross = x_cross + self.ffwd_cross(self.ln2_cross(x_cross))
+    def forward(self, x_out, x_in=None):
+        if x_in is not None:
+            # Self-attention on x_in (pass only one arg, so x_in=None in HeadCross)
+            x_in = x_in + self.multi_cross(self.ln1_cross(x_in))
+            x_in = x_in + self.ffwd_cross(self.ln2_cross(x_in))
         else:  # self attention
-            x_cross = x
+            x_in = x_out
 
-        x = x + self.masked_multi(self.ln1(x))
-        x = x + self.multi(self.ln2(x), x_cross)
-        x = x + self.ffwd(self.ln3(x))
-        return x, x_cross
+        x_out = x_out + self.masked_multi(self.ln1(x_out))
+        x_out = x_out + self.multi(self.ln2(x_out), x_in)
+        x_out = x_out + self.ffwd(self.ln3(x_out))
+        return x_out, x_in
+
 
 class CrossAttentionTransformer(nn.Module):
     def __init__(self):
@@ -211,22 +223,22 @@ class CrossAttentionTransformer(nn.Module):
         pos_emb = position_table(torch.arange(T, device=device))
         return tok_emb + pos_emb
 
-    def forward(self, x, x_cross=None, y=None):
-        if x_cross is None:
-            x_cross = x
+    def forward(self, x_out, x_in=None, y=None):
+        if x_in is None:
+            x_in = x_out
 
-        emb = CrossAttentionTransformer.get_embedding(x, token_table=self.emb_table,
+        emb = CrossAttentionTransformer.get_embedding(x_out, token_table=self.emb_table,
                                                       position_table=self.position_emb_table)
-        emb_cross = CrossAttentionTransformer.get_embedding(x_cross, token_table=self.emb_table_cross,
+        emb_cross = CrossAttentionTransformer.get_embedding(x_in, token_table=self.emb_table_cross,
                                                             position_table=self.position_emb_table_cross)
 
         # Manually iterate through blocks to pass both inputs
-        x_out = emb
-        x_cross_out = emb_cross
+        block_out = emb
+        block_cross_out = emb_cross
         for block in self.blocks:
-            x_out, x_cross_out = block(x_out, x_cross_out)
+            block_out, block_cross_out = block(block_out, block_cross_out)
 
-        logits = self.lm_head(self.ln_final(x_out))  # (B, T, vocab_size)
+        logits = self.lm_head(self.ln_final(block_out))  # (B, T, vocab_size)
 
         if y is None:
             loss = None
@@ -238,22 +250,94 @@ class CrossAttentionTransformer(nn.Module):
 
         return logits, loss
 
-    def generate(self, x, x_cross=None, max_new_tokens=100):
+    def generate(self, x_out, x_in=None, max_new_tokens=100):
         # If no cross input provided, use the same as main input
-        if x_cross is None:
-            x_cross = x
+        if x_in is None:
+            x_in = x_out
 
         for _ in range(max_new_tokens):
-            x_window = x[:, -block_size:]
-            x_cross_window = x_cross[:, -block_size:]
-            logits, loss = self(x=x_window, x_cross=x_cross_window)
+            x_window = x_out[:, -block_size:]
+            x_in_window = x_in[:, -block_size:]
+            logits, loss = self(x_out=x_window, x_in=x_in_window)
             logits = logits[:, -1, :]  # last element in T dim (B, C)
             probs = F.softmax(logits, dim=-1)
             x_next = torch.multinomial(probs, num_samples=1)  # (B, 1)
-            x = torch.cat((x, x_next), dim=1)  # (B, T+1)
-            x_cross = torch.cat((x_cross, x_next), dim=1)  # (B, T+1)
-        return x
+            x_out = torch.cat((x_out, x_next), dim=1)  # (B, T+1)
+            x_in = torch.cat((x_in, x_next), dim=1)  # (B, T+1)
+        return x_out
 
+
+def get_cross_attention_data():
+    """We translate from EN to FR, ie our x_in=EN, while x_out=FR"""
+    with open('en_fr_translation.csv', mode='r', newline='') as csv_file:
+        translation_corpus = csv.reader(csv_file, delimiter=',')
+        rows = list(translation_corpus)[1:max_pairs]
+        en_sentences = [row[0] for row in rows]
+        fr_sentences = [row[1] for row in rows]
+        en_text = ' '.join(en_sentences)
+        fr_text = ' '.join(fr_sentences)
+
+    en_tokens = list[int]([int(i) for i in en_text.encode('utf-8')])
+    fr_tokens = list[int]([int(i) for i in fr_text.encode('utf-8')])
+    print(f'English tokens length: {len(en_tokens)}')
+    print(f'French tokens length: {len(fr_tokens)}')
+
+    en_merges = bpa.train_merges(en_tokens, target_vocab_size=en_vocab_size)
+    fr_merges = bpa.train_merges(fr_tokens, target_vocab_size=fr_vocab_size)
+
+    # Prepare translation pairs data
+    translation_pairs = []
+    cut_size = block_size + 1  # 1 more token to divide it between x and y upstream on the get_batch method.
+    for en_sent, fr_sent in zip(en_sentences, fr_sentences):
+        en_encoded = bpa.encode(en_sent, en_merges)
+        fr_encoded = bpa.encode(fr_sent, fr_merges)
+        # Truncate/pad to block_size
+        en_encoded = en_encoded[:cut_size] + [0] * max(0, cut_size - len(en_encoded))
+        fr_encoded = fr_encoded[:cut_size] + [0] * max(0, cut_size - len(fr_encoded))
+        translation_pairs.append({'x_in': en_encoded, 'x_out': fr_encoded})
+
+    # Split into train and validation - use 80/20 split for more training data
+    n = int(train_split_ratio * len(translation_pairs))
+
+    train_pairs = translation_pairs[:n]
+    val_pairs = translation_pairs[n:]
+    out_merges = fr_merges
+    print(f'Training pairs: {len(train_pairs)}, Validation pairs: {len(val_pairs)}')
+    return {
+        'train': train_pairs,
+        'val': val_pairs
+    }, out_merges
+
+
+def get_self_attention_data():
+    with open('shakespear.txt', 'r') as f:
+        text = f.read()
+
+    tokens = list([int(i) for i in text.encode('utf-8')])
+    print(f'length tokens: {len(tokens)}')
+    print(f'length text: {len(text)}')
+
+    merges = bpa.train_merges(tokens, vocab_size)
+
+    # Justa a long 1 d tensor. bah!
+    encoded_data = torch.tensor(bpa.encode(text, merges), dtype=torch.long)
+    n = int(train_split_ratio * len(encoded_data))
+    return {
+        'train': encoded_data[:n],
+        'val': encoded_data[n:]
+    }, merges
+
+
+def get_data_and_merges():
+    if type == 'self-attention':
+        return get_self_attention_data()
+    elif type == 'cross-attention':
+        return get_cross_attention_data()
+    else:
+        raise Exception(f'Unknown type {type}')
+
+
+data, out_merges = get_data_and_merges()
 
 model = CrossAttentionTransformer()
 model = model.to(device)
@@ -261,14 +345,14 @@ model = model.to(device)
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 for iter in range(max_iters):
     if iter % eval_interval == 0:
-        losses = estimate_loss()
+        losses = estimate_loss(data)
         print(f"step {iter} train loss: {losses['train']:.4f}, val loss: {losses['val']:.4f}")
-    xb, yb = get_batch('train')
-    logits, loss = model(x=xb, y=yb)
+    batch_dict = get_batch(data['train'])
+    logits, loss = model(**batch_dict)
     optimizer.zero_grad(set_to_none=True)
     loss.backward()
     optimizer.step()
 
 
 context = torch.tensor([[ord(' ')]], dtype=torch.long, device=device)
-print(bpa.decode(model.generate(context, max_new_tokens=2_000)[0].tolist(), merges))
+print(bpa.decode(model.generate(context, max_new_tokens=2_000)[0].tolist(), out_merges))
