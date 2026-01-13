@@ -57,7 +57,7 @@ def get_batch(my_data):
 
 
 @torch.no_grad()
-def estimate_loss(my_data):
+def estimate_loss(my_data, model):
     out = {}
     model.eval()
     for split, data_tensor in my_data.items():
@@ -321,12 +321,13 @@ def get_cross_attention_data():
     in_merges, out_merges = bpa.get_merges()
     translation_pairs = []
     cut_size = block_size + 1  # 1 more token to divide it between x and y upstream on the get_batch method.
+    eof = get_eof()
     for en_sent, fr_sent in zip(en_sentences, fr_sentences):
         en_encoded = bpa.encode(en_sent, in_merges)
         fr_encoded = bpa.encode(fr_sent, out_merges)
         # Truncate/pad to block_size
-        en_encoded = en_encoded[:cut_size] + [get_eof()['in']] * max(0, cut_size - len(en_encoded))
-        fr_encoded = fr_encoded[:cut_size] + [get_eof()['out']] * max(0, cut_size - len(fr_encoded))
+        en_encoded = en_encoded[:cut_size] + [eof['in']] * max(0, cut_size - len(en_encoded))
+        fr_encoded = fr_encoded[:cut_size] + [eof['out']] * max(0, cut_size - len(fr_encoded))
         translation_pairs.append({'x_in': en_encoded, 'x_out': fr_encoded})
 
     train_pairs = translation_pairs[:n]
@@ -375,7 +376,7 @@ def train():
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
     for iter in range(max_iters):
         if iter % eval_interval == 0:
-            losses = estimate_loss(data)
+            losses = estimate_loss(data, model)
             print(f"step {iter} train loss: {losses['train']:.4f}, val loss: {losses['val']:.4f}")
         batch_dict = get_batch(data['train'])
         logits, loss = model(**batch_dict)
