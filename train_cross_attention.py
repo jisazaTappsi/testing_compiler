@@ -5,19 +5,18 @@ from torch.nn import functional as F
 
 import bpa
 
-batch_size = 32 # 64
+batch_size = 64 # 32
 block_size = 256 # 8
-max_iters = 2_000
+max_iters = 5_000
 eval_interval = 500
-learning_rate = 1e-3 # 3e-4
+learning_rate = 3e-4 # 1e-4
 eval_iters = 200
 dropout = 0.2
-n_head = 4  # 6
-n_embed = 64 * n_head  #
+n_head = 6  # 4
+n_embed = 64 * n_head  # 32
 train_split_ratio = 0.8
 model_type = 'cross-attention'#'self-attention'
-max_pairs = 40_000
-EOF = {'in': None, 'out': None}
+max_pairs = 250_000
 if torch.cuda.is_available():
     device = 'cuda'
 elif torch.backends.mps.is_available():
@@ -250,6 +249,7 @@ class CrossAttentionTransformer(nn.Module):
 
     def generate(self, x_out, x_in=None, max_new_tokens=100):
         self.eval()
+        eof = get_eof()
         with torch.no_grad():
             for _ in range(max_new_tokens):
                 x_window = x_out[:, -block_size:]
@@ -257,11 +257,47 @@ class CrossAttentionTransformer(nn.Module):
                 logits = logits[:, -1, :]  # last element in T dim (B, C)
                 probs = F.softmax(logits, dim=-1)
                 x_next = torch.multinomial(probs, num_samples=1)  # (B, 1)
-                if EOF['out'] is not None and (x_next.item() == EOF['out']):
+                if eof['out'] is not None and (x_next.item() == eof['out']):
                     break
                 x_out = torch.cat((x_out, x_next), dim=1)  # (B, T+1)
         self.train()
         return x_out
+
+
+def get_eof():
+    in_merges, out_merges = bpa.get_merges()
+    return {'in': max(in_merges.values()), 'out': max(out_merges.values())}
+
+
+def get_sample_val_data(num=20):
+    with open('en_fr_translation.csv', mode='r', newline='') as csv_file:
+        translation_corpus = csv.reader(csv_file, delimiter=',')
+        rows = list(translation_corpus)[:max_pairs]
+
+    # Split into train and validation - use 80/20 split for more training data
+    n = int(train_split_ratio * len(rows))
+
+    # Choose samples of validation data
+    en_sentences = [row[0] for row in rows][n:]
+    fr_sentences = [row[1] for row in rows][n:]
+    random_val_ids = torch.randint(len(en_sentences), (num,))
+    en_sentences = [en_sentences[i] for i in random_val_ids]
+    fr_sentences = [fr_sentences[i] for i in random_val_ids]
+
+    in_merges, out_merges = bpa.get_merges()
+
+    pairs = []
+    cut_size = block_size + 1  # 1 more token to divide it between x and y upstream on the get_batch method.
+    eof = get_eof()
+    for en_sent, fr_sent in zip(en_sentences, fr_sentences):
+        en_encoded = bpa.encode(en_sent, in_merges)
+        fr_encoded = bpa.encode(fr_sent, out_merges)
+        # Truncate/pad to block_size
+        en_encoded = en_encoded[:cut_size] + [eof['in']] * max(0, cut_size - len(en_encoded))
+        fr_encoded = fr_encoded[:cut_size] + [eof['out']] * max(0, cut_size - len(fr_encoded))
+        pairs.append({'x_in': en_encoded, 'x_out': fr_encoded})
+
+    return pairs
 
 
 def get_cross_attention_data():
@@ -274,28 +310,24 @@ def get_cross_attention_data():
         en_text = ' '.join(en_sentences)
         fr_text = ' '.join(fr_sentences)
 
+    # Split into train and validation - use 80/20 split for more training data
+    n = int(train_split_ratio * len(rows))
     en_tokens = [int(i) for i in en_text.encode('utf-8')]
     fr_tokens = [int(i) for i in fr_text.encode('utf-8')]
     print(f'English tokens length: {len(en_tokens)}')
     print(f'French tokens length: {len(fr_tokens)}')
 
-    in_merges, out_merges = bpa.get_merges()
-    global EOF
-    EOF = {'in': max(in_merges.values()), 'out': max(out_merges.values())}
-
     # Prepare translation pairs data
+    in_merges, out_merges = bpa.get_merges()
     translation_pairs = []
     cut_size = block_size + 1  # 1 more token to divide it between x and y upstream on the get_batch method.
     for en_sent, fr_sent in zip(en_sentences, fr_sentences):
         en_encoded = bpa.encode(en_sent, in_merges)
         fr_encoded = bpa.encode(fr_sent, out_merges)
         # Truncate/pad to block_size
-        en_encoded = en_encoded[:cut_size] + [EOF['in']] * max(0, cut_size - len(en_encoded))
-        fr_encoded = fr_encoded[:cut_size] + [EOF['out']] * max(0, cut_size - len(fr_encoded))
+        en_encoded = en_encoded[:cut_size] + [get_eof()['in']] * max(0, cut_size - len(en_encoded))
+        fr_encoded = fr_encoded[:cut_size] + [get_eof()['out']] * max(0, cut_size - len(fr_encoded))
         translation_pairs.append({'x_in': en_encoded, 'x_out': fr_encoded})
-
-    # Split into train and validation - use 80/20 split for more training data
-    n = int(train_split_ratio * len(translation_pairs))
 
     train_pairs = translation_pairs[:n]
     val_pairs = translation_pairs[n:]
@@ -334,26 +366,27 @@ def get_data_and_merges():
         raise Exception(f'Unknown type {model_type}')
 
 
-data, out_merges, in_merges = get_data_and_merges()
+def train():
+    data, out_merges, in_merges = get_data_and_merges()
 
-model = CrossAttentionTransformer()
-model = model.to(device)
+    model = CrossAttentionTransformer()
+    model = model.to(device)
 
-optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
-for iter in range(max_iters):
-    if iter % eval_interval == 0:
-        losses = estimate_loss(data)
-        print(f"step {iter} train loss: {losses['train']:.4f}, val loss: {losses['val']:.4f}")
-    batch_dict = get_batch(data['train'])
-    logits, loss = model(**batch_dict)
-    optimizer.zero_grad(set_to_none=True)
-    loss.backward()
-    optimizer.step()
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+    for iter in range(max_iters):
+        if iter % eval_interval == 0:
+            losses = estimate_loss(data)
+            print(f"step {iter} train loss: {losses['train']:.4f}, val loss: {losses['val']:.4f}")
+        batch_dict = get_batch(data['train'])
+        logits, loss = model(**batch_dict)
+        optimizer.zero_grad(set_to_none=True)
+        loss.backward()
+        optimizer.step()
 
-# Save the model after training
-torch.save(model.state_dict(), 'cross_attention_model.pth')
-print(f"Model saved to cross_attention_model.pth")
-
-
+    # Save the model after training
+    torch.save(model.state_dict(), 'cross_attention_model.pth')
+    print(f"Model saved to cross_attention_model.pth")
 
 
+if __name__ == '__main__':
+    train()

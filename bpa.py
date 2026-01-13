@@ -1,9 +1,9 @@
 import csv
 import json
 
-out_vocab_size = 2_000  # Source (English) vocabulary size
-in_vocab_size = 2_000  # Target (French) vocabulary size
-max_pairs = 10_000
+out_vocab_size = 5_000  # Source (English) vocabulary size
+in_vocab_size = 5_000  # Target (French) vocabulary size
+max_pairs = 20_000
 
 
 def get_max_pair(ids):
