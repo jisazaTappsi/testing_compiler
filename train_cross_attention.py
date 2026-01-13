@@ -303,7 +303,7 @@ def get_cross_attention_data():
     return {
         'train': train_pairs,
         'val': val_pairs
-    }, out_merges
+    }, out_merges, in_merges
 
 
 def get_self_attention_data():
@@ -322,7 +322,7 @@ def get_self_attention_data():
     return {
         'train': encoded_data[:n],
         'val': encoded_data[n:]
-    }, merges
+    }, merges, {}
 
 
 def get_data_and_merges():
@@ -334,7 +334,7 @@ def get_data_and_merges():
         raise Exception(f'Unknown type {model_type}')
 
 
-data, out_merges = get_data_and_merges()
+data, out_merges, in_merges = get_data_and_merges()
 
 model = CrossAttentionTransformer()
 model = model.to(device)
@@ -350,13 +350,10 @@ for iter in range(max_iters):
     loss.backward()
     optimizer.step()
 
-if model_type == 'self-attention':
-    context = torch.tensor([[ord(' ')]], dtype=torch.long, device=device)
-    print(bpa.decode(model.generate(context, max_new_tokens=2_000)[0].tolist(), out_merges))
-elif model_type == 'cross-attention':
-    for idx in torch.randint(len(data['val']), (20, )):
-        context = torch.tensor([[ord(' ')]], dtype=torch.long, device=device)
-        print(bpa.decode(model.generate(x_out=context,
-                                        x_in=torch.tensor([data['val'][idx]['x_in']],
-                                                          dtype=torch.long, device=device),
-                                        max_new_tokens=400)[0].tolist(), out_merges))
+# Save the model after training
+torch.save(model.state_dict(), 'cross_attention_model.pth')
+print(f"Model saved to cross_attention_model.pth")
+
+
+
+
