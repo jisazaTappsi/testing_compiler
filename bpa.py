@@ -1,9 +1,11 @@
 import csv
 import json
+import os
 
-out_vocab_size = 5_000  # Source (English) vocabulary size
-in_vocab_size = 5_000  # Target (French) vocabulary size
-max_pairs = 20_000
+
+out_vocab_size = 6_000  # Source (English) vocabulary size
+in_vocab_size = 6_000  # Target (French) vocabulary size
+max_pairs = 10_000
 
 
 def get_max_pair(ids):
@@ -94,7 +96,7 @@ def get_merges():
         return save_merges()
 
 
-def load_tokens():
+def load_tokens_fr():
     with open('en_fr_translation.csv', mode='r', newline='') as csv_file:
         translation_corpus = csv.reader(csv_file, delimiter=',')
         rows = list(translation_corpus)[-max_pairs:]
@@ -103,11 +105,47 @@ def load_tokens():
         en_text = ' '.join(en_sentences)
         fr_text = ' '.join(fr_sentences)
 
+
     en_tokens = [int(i) for i in en_text.encode('utf-8')]
     fr_tokens = [int(i) for i in fr_text.encode('utf-8')]
     print(f'English tokens length: {len(en_tokens)}')
     print(f'French tokens length: {len(fr_tokens)}')
     return en_tokens, fr_tokens
+
+
+def get_last_rows_fast(filename):
+    with open(filename, 'rb') as f:  # Open in binary mode
+        f.seek(0, os.SEEK_END)
+        file_size = f.tell()
+
+        # Estimate how many bytes to read (avg 100 bytes per line * max_pairs)
+        # We multiply by 2 or 4 to be safe and ensure we get enough lines
+        buffer_size = max_pairs * 200
+
+        if buffer_size > file_size:
+            f.seek(0)
+        else:
+            f.seek(-buffer_size, os.SEEK_END)
+
+        # Read the chunk and decode to text
+        chunk = f.read().decode('utf-8', errors='ignore')
+
+        # Get the lines and take the last N
+        return chunk.splitlines()[-max_pairs:]
+
+
+def load_tokens():
+    es_sentences = get_last_rows_fast('OpenSubtitles.es')
+    es_text = ' '.join(es_sentences)
+
+    en_sentences = get_last_rows_fast('OpenSubtitles.en')
+    en_text = ' '.join(en_sentences)
+
+    en_tokens = [int(i) for i in en_text.encode('utf-8')]
+    es_tokens = [int(i) for i in es_text.encode('utf-8')]
+    print(f'English tokens length: {len(en_tokens)}')
+    print(f'Spanish tokens length: {len(es_tokens)}')
+    return en_tokens, es_tokens
 
 
 def save_merges():
