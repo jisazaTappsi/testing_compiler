@@ -3,9 +3,25 @@ import json
 import os
 
 
-out_vocab_size = 6_000  # Source (English) vocabulary size
-in_vocab_size = 6_000  # Target (French) vocabulary size
+out_vocab_size = 4_096  # Source (English) vocabulary size
+in_vocab_size = 8_192  # Target (Spanish) vocabulary size
 max_pairs = 10_000
+
+def get_max_merge(my_merge):
+    return max(my_merge.values()) if my_merge else 255
+
+
+def get_start_and_end_tokens_as_list(my_merge):
+    merge_max = get_max_merge(my_merge)
+    return [merge_max+1, merge_max+2]
+
+
+def get_start_and_end_tokens():
+    in_merges, out_merges = get_merges()
+    merge_max_in = get_max_merge(in_merges)
+    merge_max_out = get_max_merge(out_merges)
+    return {f'start_in': merge_max_in + 1, f'end_in': merge_max_in + 2,
+            f'start_out': merge_max_out + 1, f'end_out': merge_max_out + 2}
 
 
 def get_max_pair(ids):
@@ -42,7 +58,7 @@ def train_merges(toks, input_type, target_vocab_size=280):
     ids = list(toks)
     idx = 256
     my_merges = {}  # pair => idx
-    for i in range(target_vocab_size - idx - 1):  # Saves 1 token for EOF
+    for i in range(target_vocab_size - idx - 2):  # Saves 2 tokens for START and END
         pair, pair_count = get_max_pair(ids)
         print(f'merging {pair} into a new token {idx}')
         ids = merge(ids, pair, idx=idx)
@@ -61,7 +77,8 @@ def train_merges(toks, input_type, target_vocab_size=280):
 
 def decode(ids, my_merges):
     vocab = get_vocab(my_merges)
-    toks = b''.join(vocab[i] for i in ids)
+    tokens = get_start_and_end_tokens_as_list(my_merges)
+    toks = b''.join(vocab[i] for i in ids if i not in tokens)
     return toks.decode('utf-8', errors='replace')
 
 def encode(string, my_merges):
@@ -94,23 +111,6 @@ def get_merges():
         return get_merge('in'), get_merge('out')
     except FileNotFoundError:
         return save_merges()
-
-
-def load_tokens_fr():
-    with open('en_fr_translation.csv', mode='r', newline='') as csv_file:
-        translation_corpus = csv.reader(csv_file, delimiter=',')
-        rows = list(translation_corpus)[-max_pairs:]
-        en_sentences = [row[0] for row in rows]
-        fr_sentences = [row[1] for row in rows]
-        en_text = ' '.join(en_sentences)
-        fr_text = ' '.join(fr_sentences)
-
-
-    en_tokens = [int(i) for i in en_text.encode('utf-8')]
-    fr_tokens = [int(i) for i in fr_text.encode('utf-8')]
-    print(f'English tokens length: {len(en_tokens)}')
-    print(f'French tokens length: {len(fr_tokens)}')
-    return en_tokens, fr_tokens
 
 
 def get_last_rows_fast(filename):

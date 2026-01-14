@@ -1,6 +1,7 @@
 import bpa
 import torch
-from cross_attention_train import CrossAttentionTransformer, get_sample_val_data, get_eof
+from cross_attention_train import CrossAttentionTransformer, get_sample_val_data, block_size
+from bpa import get_start_and_end_tokens
 
 # Set up device
 if torch.cuda.is_available():
@@ -13,7 +14,7 @@ else:
 
 def run():
     # Load data and merges
-    val_samples = get_sample_val_data(num=10)
+    val_samples = get_sample_val_data(num=100)
     in_merges, out_merges = bpa.get_merges()
 
     # Create model instance
@@ -25,15 +26,15 @@ def run():
     model.eval()
 
     # Run generation
-    eof = get_eof()
+    tokens = get_start_and_end_tokens()
     for row in val_samples:
-        context = torch.tensor([[ord(' ')]], dtype=torch.long, device=device)
+        context = torch.tensor([[tokens['start_out']]], dtype=torch.long, device=device)
         data_in = row['x_in']
-        print(f'I: {bpa.decode([e for e in data_in if e != eof['in']], in_merges)}')
+        print(f'I: {bpa.decode([e for e in data_in if e != tokens['end_in']], in_merges)}')
         translation = bpa.decode(
             model.generate(x_out=context,
                            x_in=torch.tensor([data_in], dtype=torch.long, device=device),
-                           max_new_tokens=400)[0].tolist(),
+                           max_new_tokens=block_size)[0].tolist(),
             out_merges
         )
         print(f'O: {translation}\n')

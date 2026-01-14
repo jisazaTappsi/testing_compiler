@@ -6,6 +6,8 @@ from itertools import islice
 from torch.nn import functional as F
 
 import bpa
+from bpa import get_start_and_end_tokens
+
 
 def get_device():
     if torch.cuda.is_available():
@@ -253,7 +255,7 @@ class CrossAttentionTransformer(nn.Module):
 
     def generate(self, x_out, x_in=None, max_new_tokens=100):
         self.eval()
-        eof = get_eof()
+        tokens = get_start_and_end_tokens()
         with torch.no_grad():
             for _ in range(max_new_tokens):
                 x_window = x_out[:, -block_size:]
@@ -261,16 +263,11 @@ class CrossAttentionTransformer(nn.Module):
                 logits = logits[:, -1, :]  # last element in T dim (B, C)
                 probs = F.softmax(logits, dim=-1)
                 x_next = torch.multinomial(probs, num_samples=1)  # (B, 1)
-                if eof['out'] is not None and (x_next.item() == eof['out']):
+                if tokens['end_out'] is not None and (x_next.item() == tokens['end_out']):
                     break
                 x_out = torch.cat((x_out, x_next), dim=1)  # (B, T+1)
         self.train()
         return x_out
-
-
-def get_eof():
-    in_merges, out_merges = bpa.get_merges()
-    return {'in': max(in_merges.values()), 'out': max(out_merges.values())}
 
 
 def get_first_rows_fast(filename, max_pairs):
@@ -300,46 +297,15 @@ def get_sample_val_data(num=20):
     in_merges, out_merges = bpa.get_merges()
 
     pairs = []
-    cut_size = block_size + 1  # 1 more token to divide it between x and y upstream on the get_batch method.
-    eof = get_eof()
+    cut_size = block_size  # 1 more token to divide it between x and y upstream on the get_batch method.
+    tokens = get_start_and_end_tokens()
     for en_sent, es_sent in zip(en_sentences, es_sentences):
         en_encoded = bpa.encode(en_sent, in_merges)
         es_encoded = bpa.encode(es_sent, out_merges)
         # Truncate/pad to block_size
-        en_encoded = en_encoded[:cut_size] + [eof['in']] * max(0, cut_size - len(en_encoded))
-        es_encoded = es_encoded[:cut_size] + [eof['out']] * max(0, cut_size - len(es_encoded))
+        en_encoded = [tokens['start_in']] + en_encoded[:cut_size] + [tokens['end_in']] * max(0, cut_size - len(en_encoded))
+        es_encoded = [tokens['start_out']] + es_encoded[:cut_size] + [tokens['end_out']] * max(0, cut_size - len(es_encoded))
         pairs.append({'x_in': en_encoded, 'x_out': es_encoded})
-
-    return pairs
-
-
-def get_sample_val_data_fr(num=20):
-    with open('en_fr_translation.csv', mode='r', newline='') as csv_file:
-        translation_corpus = csv.reader(csv_file, delimiter=',')
-        rows = list(translation_corpus)[:max_pairs]
-
-    # Split into train and validation - use 80/20 split for more training data
-    n = int(train_split_ratio * len(rows))
-
-    # Choose samples of validation data
-    en_sentences = [row[0] for row in rows][n:]
-    fr_sentences = [row[1] for row in rows][n:]
-    random_val_ids = torch.randint(len(en_sentences), (num,))
-    en_sentences = [en_sentences[i] for i in random_val_ids]
-    fr_sentences = [fr_sentences[i] for i in random_val_ids]
-
-    in_merges, out_merges = bpa.get_merges()
-
-    pairs = []
-    cut_size = block_size + 1  # 1 more token to divide it between x and y upstream on the get_batch method.
-    eof = get_eof()
-    for en_sent, fr_sent in zip(en_sentences, fr_sentences):
-        en_encoded = bpa.encode(en_sent, in_merges)
-        fr_encoded = bpa.encode(fr_sent, out_merges)
-        # Truncate/pad to block_size
-        en_encoded = en_encoded[:cut_size] + [eof['in']] * max(0, cut_size - len(en_encoded))
-        fr_encoded = fr_encoded[:cut_size] + [eof['out']] * max(0, cut_size - len(fr_encoded))
-        pairs.append({'x_in': en_encoded, 'x_out': fr_encoded})
 
     return pairs
 
@@ -355,49 +321,15 @@ def get_cross_attention_data():
     # Prepare translation pairs data
     in_merges, out_merges = bpa.get_merges()
     translation_pairs = []
-    cut_size = block_size + 1  # 1 more token to divide it between x and y upstream on the get_batch method.
-    eof = get_eof()
-    for en_sent, fr_sent in zip(en_sentences, es_sentences):
+    cut_size = block_size - 1  # 1 more token to divide it between x and y upstream on the get_batch method.
+    tokens = get_start_and_end_tokens()
+    for en_sent, es_sent in zip(en_sentences, es_sentences):
         en_encoded = bpa.encode(en_sent, in_merges)
-        es_encoded = bpa.encode(fr_sent, out_merges)
+        es_encoded = bpa.encode(es_sent, out_merges)
         # Truncate/pad to block_size
-        en_encoded = en_encoded[:cut_size] + [eof['in']] * max(0, cut_size - len(en_encoded))
-        es_encoded = es_encoded[:cut_size] + [eof['out']] * max(0, cut_size - len(es_encoded))
+        en_encoded = [tokens['start_in']] + en_encoded[:cut_size] + [tokens['end_in']] * max(0, cut_size - len(en_encoded))
+        es_encoded = [tokens['start_out']] + es_encoded[:cut_size] + [tokens['end_out']] * max(0, cut_size - len(es_encoded))
         translation_pairs.append({'x_in': en_encoded, 'x_out': es_encoded})
-
-    train_pairs = translation_pairs[:n]
-    val_pairs = translation_pairs[n:]
-    print(f'Training pairs: {len(train_pairs)}, Validation pairs: {len(val_pairs)}')
-    return {
-        'train': train_pairs,
-        'val': val_pairs
-    }, out_merges, in_merges
-
-
-def get_cross_attention_data_fr():
-    """We translate from EN to FR, ie our x_in=EN, while x_out=FR"""
-    with open('en_fr_translation.csv', mode='r', newline='') as csv_file:
-        translation_corpus = csv.reader(csv_file, delimiter=',')
-        rows = list(translation_corpus)[:max_pairs]
-
-    en_sentences = [row[0] for row in rows]
-    fr_sentences = [row[1] for row in rows]
-
-    # Split into train and validation - use 80/20 split for more training data
-    n = int(train_split_ratio * len(rows))
-
-    # Prepare translation pairs data
-    in_merges, out_merges = bpa.get_merges()
-    translation_pairs = []
-    cut_size = block_size + 1  # 1 more token to divide it between x and y upstream on the get_batch method.
-    eof = get_eof()
-    for en_sent, fr_sent in zip(en_sentences, fr_sentences):
-        en_encoded = bpa.encode(en_sent, in_merges)
-        fr_encoded = bpa.encode(fr_sent, out_merges)
-        # Truncate/pad to block_size
-        en_encoded = en_encoded[:cut_size] + [eof['in']] * max(0, cut_size - len(en_encoded))
-        fr_encoded = fr_encoded[:cut_size] + [eof['out']] * max(0, cut_size - len(fr_encoded))
-        translation_pairs.append({'x_in': en_encoded, 'x_out': fr_encoded})
 
     train_pairs = translation_pairs[:n]
     val_pairs = translation_pairs[n:]
