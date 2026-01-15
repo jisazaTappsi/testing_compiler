@@ -5,8 +5,8 @@ import torch.nn as nn
 from itertools import islice
 from torch.nn import functional as F
 
-import bpa
-from bpa import get_start_and_end_tokens
+import bpe
+from bpe import get_start_and_end_tokens
 
 
 def get_device():
@@ -204,11 +204,11 @@ class CrossAttentionTransformer(nn.Module):
     def __init__(self):
         super().__init__()
         # Main branch embeddings
-        self.emb_table = nn.Embedding(num_embeddings=bpa.out_vocab_size, embedding_dim=n_embed)
+        self.emb_table = nn.Embedding(num_embeddings=bpe.out_vocab_size, embedding_dim=n_embed)
         self.position_emb_table = nn.Embedding(num_embeddings=block_size, embedding_dim=n_embed)
 
         # Cross branch embeddings
-        self.emb_table_cross = nn.Embedding(num_embeddings=bpa.in_vocab_size, embedding_dim=n_embed)
+        self.emb_table_cross = nn.Embedding(num_embeddings=bpe.in_vocab_size, embedding_dim=n_embed)
         self.position_emb_table_cross = nn.Embedding(num_embeddings=block_size, embedding_dim=n_embed)
 
         self.blocks = nn.ModuleList([
@@ -217,7 +217,7 @@ class CrossAttentionTransformer(nn.Module):
             BlockCross(n_embed, n_head=n_head),
         ])
         self.ln_final = nn.LayerNorm(n_embed)
-        self.lm_head = nn.Linear(n_embed, bpa.out_vocab_size)
+        self.lm_head = nn.Linear(n_embed, bpe.out_vocab_size)
 
     @staticmethod
     def get_embedding(x, token_table, position_table):
@@ -263,7 +263,7 @@ class CrossAttentionTransformer(nn.Module):
                 logits = logits[:, -1, :]  # last element in T dim (B, C)
                 probs = F.softmax(logits, dim=-1)
                 x_next = torch.multinomial(probs, num_samples=1)  # (B, 1)
-                if tokens['end_out'] is not None and (x_next.item() == tokens['end_out']):
+                if x_next.item() == tokens['end_out']:
                     break
                 x_out = torch.cat((x_out, x_next), dim=1)  # (B, T+1)
         self.train()
@@ -294,14 +294,14 @@ def get_sample_val_data(num=20):
     en_sentences = [en_sentences[i] for i in random_val_ids]
     es_sentences = [es_sentences[i] for i in random_val_ids]
 
-    in_merges, out_merges = bpa.get_merges()
+    in_merges, out_merges = bpe.get_merges()
 
     pairs = []
     cut_size = block_size  # 1 more token to divide it between x and y upstream on the get_batch method.
     tokens = get_start_and_end_tokens()
     for en_sent, es_sent in zip(en_sentences, es_sentences):
-        en_encoded = bpa.encode(en_sent, in_merges)
-        es_encoded = bpa.encode(es_sent, out_merges)
+        en_encoded = bpe.encode(en_sent, in_merges)
+        es_encoded = bpe.encode(es_sent, out_merges)
         # Truncate/pad to block_size
         en_encoded = [tokens['start_in']] + en_encoded[:cut_size] + [tokens['end_in']] * max(0, cut_size - len(en_encoded))
         es_encoded = [tokens['start_out']] + es_encoded[:cut_size] + [tokens['end_out']] * max(0, cut_size - len(es_encoded))
@@ -319,16 +319,28 @@ def get_cross_attention_data():
     n = int(train_split_ratio * len(en_sentences))
 
     # Prepare translation pairs data
-    in_merges, out_merges = bpa.get_merges()
+    in_merges, out_merges = bpe.get_merges()
     translation_pairs = []
-    cut_size = block_size - 1  # 1 more token to divide it between x and y upstream on the get_batch method.
+    cut_size = block_size - 2 # 1 more token to divide it between x and y upstream on the get_batch method.
     tokens = get_start_and_end_tokens()
     for en_sent, es_sent in zip(en_sentences, es_sentences):
-        en_encoded = bpa.encode(en_sent, in_merges)
-        es_encoded = bpa.encode(es_sent, out_merges)
+        en_encoded = bpe.encode(en_sent, in_merges)
+        es_encoded = bpe.encode(es_sent, out_merges)
         # Truncate/pad to block_size
-        en_encoded = [tokens['start_in']] + en_encoded[:cut_size] + [tokens['end_in']] * max(0, cut_size - len(en_encoded))
-        es_encoded = [tokens['start_out']] + es_encoded[:cut_size] + [tokens['end_out']] * max(0, cut_size - len(es_encoded))
+        en_encoded = en_encoded[:cut_size]
+        en_encoded = [tokens['start_in']] + en_encoded + [tokens['end_in']] * max(1, block_size - len(en_encoded))
+        es_encoded = es_encoded[:cut_size]
+        es_encoded = [tokens['start_out']] + es_encoded + [tokens['end_out']] * max(1, block_size - len(es_encoded))
+        #print(en_encoded)
+        #print(es_encoded)
+        """
+        assert len(en_encoded) == 65
+        assert len(es_encoded) == 65
+        assert en_encoded[0] == tokens['start_in']
+        assert en_encoded[-1] == tokens['end_in']
+        assert es_encoded[0] == tokens['start_out']
+        assert es_encoded[-1] == tokens['end_out']
+        """
         translation_pairs.append({'x_in': en_encoded, 'x_out': es_encoded})
 
     train_pairs = translation_pairs[:n]
@@ -348,10 +360,10 @@ def get_self_attention_data():
     print(f'length tokens: {len(tokens)}')
     print(f'length text: {len(text)}')
 
-    merges = bpa.train_merges(tokens, bpa.out_vocab_size)
+    merges = bpe.train_merges(tokens, bpe.out_vocab_size)
 
     # Justa a long 1 d tensor. bah!
-    encoded_data = torch.tensor(bpa.encode(text, merges), dtype=torch.long)
+    encoded_data = torch.tensor(bpe.encode(text, merges), dtype=torch.long)
     n = int(train_split_ratio * len(encoded_data))
     return {
         'train': encoded_data[:n],
@@ -373,6 +385,12 @@ def train():
 
     model = CrossAttentionTransformer()
     model = model.to(device)
+    try:
+        model.load_state_dict(torch.load('cross_attention_model.pth'))
+        print('training old model')
+        model.train()
+    except FileNotFoundError:
+        print('Creating model from scratch')
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
     for iter in range(max_iters):

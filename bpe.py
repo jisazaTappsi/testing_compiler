@@ -1,10 +1,9 @@
-import csv
 import json
 import os
 
 
-out_vocab_size = 4_096  # Source (English) vocabulary size
-in_vocab_size = 8_192  # Target (Spanish) vocabulary size
+out_vocab_size = 4_096  # Target (Spanish) vocabulary size
+in_vocab_size = 4_096  # Source (English) vocabulary size - same as out so end tokens match
 max_pairs = 10_000
 
 def get_max_merge(my_merge):
