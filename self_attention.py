@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
-import bpe
+import data
 
 batch_size = 32 # 64
 block_size = 8 # 256
@@ -165,9 +165,9 @@ tokens = list([int(i) for i in text.encode('utf-8')])
 print(f'length tokens: {len(tokens)}')
 print(f'length text: {len(text)}')
 
-merges = bpe.train_merges(tokens, vocab_size)
+merges = data.train_merges(tokens, 'self_attention', 'out', vocab_size)
 
-data = torch.tensor(bpe.encode(text, merges), dtype=torch.long)
+data = torch.tensor(data.encode(text, merges), dtype=torch.long)
 n = int(0.9*len(data))
 train_data = data[:n]  # justa a long 1 d tensor. bah!
 val_data = data[n:]
@@ -188,4 +188,4 @@ for iter in range(max_iters):
 
 
 context = torch.tensor([[ord(' ')]], dtype=torch.long, device=device)
-print(bpe.decode(model.generate(context, max_new_tokens=2_000)[0].tolist(), merges))
+print(data.decode(model.generate(context, max_new_tokens=2_000)[0].tolist(), merges))
