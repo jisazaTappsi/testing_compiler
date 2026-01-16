@@ -77,6 +77,7 @@ TT_LPAREN = 'TT_LPAREN'
 TT_RPAREN = 'TT_RPAREN'
 TT_EOF = 'EOF'
 
+
 class Token:
     def __init__(self, type_, value=None, pos_start=None, pos_end=None):
         self.type = type_
@@ -188,7 +189,7 @@ class BinOpNode:
         self.pos_end = self.right_node.pos_end
 
     def __repr__(self):
-        return f'({self.left_node}, {self.op_tok}, {self.right_node})'
+        return f'({self.left_node} {self.op_tok} {self.right_node})'
 
 
 class UnaryOpNode:
@@ -200,7 +201,7 @@ class UnaryOpNode:
         self.pos_end = self.node.pos_end
 
     def __repr__(self):
-        return f'({self.op_tok}, {self.node})'
+        return f'({self.op_tok} {self.node})'
 
 
 ########################
