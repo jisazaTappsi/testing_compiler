@@ -1,10 +1,11 @@
+import csv
 import json
 import os
 from util import *
 
-out_vocab_size = 4_096  # Target (Spanish) vocabulary size
-in_vocab_size = 4_096  # Source (English) vocabulary size - same as out so end tokens match
-max_pairs = 10_000
+out_vocab_size = 2000  # Target (Spanish) vocabulary size
+in_vocab_size = 2000  # Source (English) vocabulary size - same as out so end tokens match
+max_pairs = 5_000
 
 def get_max_merge(my_merge):
     return max(my_merge.values()) if my_merge else 255
@@ -114,7 +115,10 @@ def get_merges(model_type):
     try:
         return get_merge(model_type, 'in'), get_merge(model_type, 'out')
     except FileNotFoundError:
-        return save_lang_merges()
+        if model_type == 'lang':
+            return save_lang_merges()
+        elif model_type == 'code':
+            return save_code_merges()
 
 
 def get_last_rows_fast(filename):
@@ -165,7 +169,35 @@ def save_lang_merges():
     return in_merges, out_merges
 
 
-def get_pairs(in_sentences, out_sentences, in_merges, out_merges, block_size, model_type):
+def load_code_tokens():
+    with open('dataset.csv', 'r') as f:
+        reader = csv.reader(f)
+        lex_texts, ast_texts = zip(*[(row[0], row[1]) for row in reader if len(row) >= 2])
+    
+    lex_text = ' '.join(lex_texts)
+    ast_text = ' '.join(ast_texts)
+    
+    lex_tokens = [int(i) for i in lex_text.encode('utf-8')]
+    ast_tokens = [int(i) for i in ast_text.encode('utf-8')]
+    print(f'Lex tokens length: {len(lex_tokens)}')
+    print(f'AST tokens length: {len(ast_tokens)}')
+    return lex_tokens, ast_tokens
+
+
+def save_code_merges():
+    # When recalculating merges needs to delete the model first, as it will lose the encoding :(
+    try:
+        os.remove(code_model_name)
+    except FileNotFoundError:
+        pass
+
+    lex_tokens, ast_tokens = load_code_tokens()
+    in_merges = train_merges(lex_tokens, 'code', 'in', target_vocab_size=out_vocab_size)
+    out_merges = train_merges(ast_tokens, 'code', 'out', target_vocab_size=in_vocab_size)
+    return in_merges, out_merges
+
+
+def get_lang_pairs(in_sentences, out_sentences, in_merges, out_merges, block_size, model_type):
     pairs = []
     cut_size = block_size - 2  # 1 more token to divide it between x and y upstream on the get_batch method.
     tokens = get_start_and_end_tokens(model_type)
@@ -181,14 +213,47 @@ def get_pairs(in_sentences, out_sentences, in_merges, out_merges, block_size, mo
     return pairs
 
 
+def get_code_pairs(rows, in_merges, out_merges, block_size, model_type):
+    pairs = []
+    cut_size = block_size - 2  # 1 more token to divide it between x and y upstream on the get_batch method.
+    tokens = get_start_and_end_tokens(model_type)
+    for row in rows:
+        lex_sent, ast_sent, _ = row.split(',')
+        lex_encoded = encode(lex_sent, in_merges)
+        ast_encoded = encode(ast_sent, out_merges)
+        # Truncate/pad to block_size
+        lex_encoded = lex_encoded[:cut_size]
+        lex_encoded = [tokens['start_in']] + lex_encoded + [tokens['end_in']] * max(1, block_size - len(lex_encoded))
+        ast_encoded = ast_encoded[:cut_size]
+        ast_encoded = [tokens['start_out']] + ast_encoded + [tokens['end_out']] * max(1, block_size - len(ast_encoded))
+        pairs.append({'x_in': lex_encoded, 'x_out': ast_encoded})
+    return pairs
+
+
 def get_lang_data():
     """We translate from EN to ES, ie our x_in=EN, while x_out=ES"""
     in_sentences = get_first_rows_fast('OpenSubtitles.en', max_pairs)
     out_sentences = get_first_rows_fast('OpenSubtitles.es', max_pairs)
     in_merges, out_merges = get_merges('lang')
-    pairs = get_pairs(in_sentences, out_sentences, in_merges, out_merges, block_size, 'lang')
+    pairs = get_lang_pairs(in_sentences, out_sentences, in_merges, out_merges, block_size, 'lang')
 
     n = int(train_split_ratio * len(in_sentences))
+    train_pairs = pairs[:n]
+    val_pairs = pairs[n:]
+    print(f'Training pairs: {len(train_pairs)}, Validation pairs: {len(val_pairs)}')
+    return {
+        'train': train_pairs,
+        'val': val_pairs
+    }, out_merges, in_merges
+
+
+def get_code_data():
+    """We translate from Lex to AST, ie our x_in=LEX, while x_out=AST"""
+    rows = get_first_rows_fast('dataset.csv', max_pairs)
+    in_merges, out_merges = get_merges('code')
+    pairs = get_code_pairs(rows, in_merges, out_merges, block_size, 'code')
+
+    n = int(train_split_ratio * len(pairs))
     train_pairs = pairs[:n]
     val_pairs = pairs[n:]
     print(f'Training pairs: {len(train_pairs)}, Validation pairs: {len(val_pairs)}')

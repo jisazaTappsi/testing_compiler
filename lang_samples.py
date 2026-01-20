@@ -17,7 +17,7 @@ def get_sample_val_data(num=20):
     out_sentences = [out_sentences[i] for i in random_val_ids]
 
     in_merges, out_merges = data.get_merges('lang')
-    return data.get_pairs(in_sentences, out_sentences, in_merges, out_merges, block_size, 'lang')
+    return data.get_lang_pairs(in_sentences, out_sentences, in_merges, out_merges, block_size, 'lang')
 
 
 def run():

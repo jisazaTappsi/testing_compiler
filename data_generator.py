@@ -2,14 +2,9 @@ import csv
 import random
 
 import basic
+from util import *
 
-# Default block size (can be overridden by importing from cross_attention_train if available)
-try:
-    from cross_attention_train import block_size
-except ImportError:
-    block_size = 64  # Default value
-
-num_samples = 1_000
+num_samples = 10_000
 
 
 def generate_number():
@@ -115,9 +110,11 @@ def generate():
     dataset = []
     
     for i in range(num_samples):
+        if i % 100 == 0:
+            print(f"loaded: {(i/num_samples)*100:.2f}%")
         # Generate a valid expression
         text = generate_valid_expression()
-        
+
         # Verify it can be lexed and parsed
         lexer = basic.Lexer('<stdin>', text)
         try:
@@ -127,7 +124,7 @@ def generate():
                 invalid_count += 1
                 continue
             lexer_text = ' '.join(t.__repr__() for t in tokens)
-            print(lexer_text)
+            #print(lexer_text)
 
             # Try to parse
             parser = basic.Parser(tokens)
@@ -136,7 +133,7 @@ def generate():
                 print('Parsing is invalid!')
                 invalid_count += 1
                 continue
-            print(ast.node)
+            #print(ast.node)
 
             interpreter = basic.Interpreter()
             res = interpreter.visit(ast.node)
@@ -144,7 +141,7 @@ def generate():
                 print('Interpretation is invalid!')
                 invalid_count += 1
                 continue
-            print(res.value)
+            #print(res.value)
 
             valid_count += 1
             dataset.append((lexer_text, ast.node, res.value))
