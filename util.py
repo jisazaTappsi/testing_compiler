@@ -13,7 +13,7 @@ n_head = 6  # 4
 n_embed = 64 * n_head  # 32
 train_split_ratio = 0.8
 max_pairs = 10_000
-model_name = 'lang_model.pth'
+lang_model_name = 'lang_model.pth'
 
 if torch.cuda.is_available():
     device = 'cuda'

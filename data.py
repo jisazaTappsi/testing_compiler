@@ -114,7 +114,7 @@ def get_merges(model_type):
     try:
         return get_merge(model_type, 'in'), get_merge(model_type, 'out')
     except FileNotFoundError:
-        return save_merges()
+        return save_lang_merges()
 
 
 def get_last_rows_fast(filename):
@@ -138,7 +138,7 @@ def get_last_rows_fast(filename):
         return chunk.splitlines()[-max_pairs:]
 
 
-def load_tokens():
+def load_lang_tokens():
     es_sentences = get_last_rows_fast('OpenSubtitles.es')
     es_text = ' '.join(es_sentences)
 
@@ -152,10 +152,16 @@ def load_tokens():
     return en_tokens, es_tokens
 
 
-def save_merges():
-    en_tokens, fr_tokens = load_tokens()
+def save_lang_merges():
+    # When recalculating merges needs to delete the model first, as it will lose the encoding :(
+    try:
+        os.remove(lang_model_name)
+    except FileNotFoundError:
+        pass
+
+    en_tokens, es_tokens = load_lang_tokens()
     in_merges = train_merges(en_tokens, 'lang', 'in', target_vocab_size=out_vocab_size)
-    out_merges = train_merges(fr_tokens, 'lang', 'out', target_vocab_size=in_vocab_size)
+    out_merges = train_merges(es_tokens, 'lang', 'out', target_vocab_size=in_vocab_size)
     return in_merges, out_merges
 
 
@@ -193,4 +199,4 @@ def get_lang_data():
 
 
 if __name__ == '__main__':
-    save_merges()
+    save_lang_merges()

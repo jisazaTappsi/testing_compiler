@@ -222,7 +222,7 @@ def train():
     model = model.to(device)
 
     try:
-        model.load_state_dict(torch.load(model_name))
+        model.load_state_dict(torch.load(lang_model_name))
         print('training an existing model')
         model.train()
     except FileNotFoundError:
@@ -240,8 +240,8 @@ def train():
         optimizer.step()
 
     # Save the model after training
-    torch.save(model.state_dict(), model_name)
-    print(f"Model saved to {model_name}")
+    torch.save(model.state_dict(), lang_model_name)
+    print(f"Model saved to {lang_model_name}")
 
 
 if __name__ == '__main__':

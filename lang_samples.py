@@ -1,6 +1,6 @@
 import data
 from util import *
-from lang_train import CrossAttentionTransformer, block_size, model_name
+from lang_train import CrossAttentionTransformer, block_size
 
 
 def get_sample_val_data(num=20):
@@ -27,7 +27,7 @@ def run():
 
     model = CrossAttentionTransformer()
     model = model.to(device)
-    model.load_state_dict(torch.load(model_name))
+    model.load_state_dict(torch.load(lang_model_name))
     model.eval()
 
     # Run generation
