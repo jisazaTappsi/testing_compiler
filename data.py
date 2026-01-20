@@ -5,7 +5,7 @@ from util import *
 
 out_vocab_size = 2000  # Target (Spanish) vocabulary size
 in_vocab_size = 2000  # Source (English) vocabulary size - same as out so end tokens match
-max_pairs = 5_000
+max_merge_pairs = 10_000
 
 def get_max_merge(my_merge):
     return max(my_merge.values()) if my_merge else 255
@@ -126,9 +126,9 @@ def get_last_rows_fast(filename):
         f.seek(0, os.SEEK_END)
         file_size = f.tell()
 
-        # Estimate how many bytes to read (avg 100 bytes per line * max_pairs)
+        # Estimate how many bytes to read (avg 100 bytes per line * max_merge_pairs)
         # We multiply by 2 or 4 to be safe and ensure we get enough lines
-        buffer_size = max_pairs * 200
+        buffer_size = max_merge_pairs * 200
 
         if buffer_size > file_size:
             f.seek(0)
@@ -139,7 +139,7 @@ def get_last_rows_fast(filename):
         chunk = f.read().decode('utf-8', errors='ignore')
 
         # Get the lines and take the last N
-        return chunk.splitlines()[-max_pairs:]
+        return chunk.splitlines()[-max_merge_pairs:]
 
 
 def load_lang_tokens():
@@ -172,7 +172,7 @@ def save_lang_merges():
 def load_code_tokens():
     with open('dataset.csv', 'r') as f:
         reader = csv.reader(f)
-        lex_texts, ast_texts = zip(*[(row[0], row[1]) for row in reader if len(row) >= 2])
+        lex_texts, ast_texts = zip(*[(row[0], row[1]) for idx, row in enumerate(reader) if idx < max_merge_pairs])
     
     lex_text = ' '.join(lex_texts)
     ast_text = ' '.join(ast_texts)

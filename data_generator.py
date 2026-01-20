@@ -4,7 +4,7 @@ import random
 import basic
 from util import *
 
-num_samples = 10_000
+num_samples = 1_000_000
 
 
 def generate_number():
@@ -149,9 +149,10 @@ def generate():
             invalid_count += 1
             continue
 
-        with open('dataset.csv', 'w', newline='') as csvfile:
-            writer = csv.writer(csvfile)
-            writer.writerows(dataset)
+    # Write dataset to CSV file once at the end
+    with open('dataset.csv', 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerows(dataset)
 
     print(f"\nValid: {valid_count}, Invalid: {invalid_count}, Success rate: {valid_count/num_samples*100:.1f}%")
 
