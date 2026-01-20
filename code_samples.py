@@ -43,8 +43,9 @@ def run():
                            max_new_tokens=block_size)[0].tolist(),
             out_merges
         )
-        print(f'O: {translation}')
-        print(f'T: {sample_decode(row['x_out'], tokens, out_merges)}\n')
+        print(f'O(#{translation.count('(') - translation.count(')')}): {translation}')
+        data_out = sample_decode(row['x_out'], tokens, out_merges)
+        print(f"T(#{data_out.count('(') - data_out.count(')')}): {data_out}\n")
 
 
 if __name__ == '__main__':

@@ -28,3 +28,7 @@ def get_first_rows_fast(filename, max_pairs):
     with open(filename, 'r', encoding='utf-8') as f:
         first_lines = list(islice(f, max_pairs))
     return [line.strip() for line in first_lines]
+
+
+# Parenthesis balance loss weight (set to 0 to disable)
+parenthesis_balance_weight = 0.1
