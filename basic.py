@@ -242,6 +242,119 @@ class Parser:
         if self.tok_idx < len(self.tokens):
             self.current_tok = self.tokens[self.tok_idx]
         return self.current_tok
+    
+    @staticmethod
+    def get_tree_from_string(text):
+        """
+        Parse a tree string representation and rebuild AST nodes recursively.
+        Format examples:
+        - (TT_INT:2 TT_MUL TT_INT:2) -> BinOpNode
+        - (TT_MINUS TT_INT:5) -> UnaryOpNode
+        - TT_INT:3 -> NumberNode
+        """
+        import re
+        
+        text = text.strip()
+        
+        # Helper function to parse a token string (e.g., "TT_INT:2" or "TT_MUL")
+        def parse_token(token_str):
+            token_str = token_str.strip()
+            # Create a dummy position for tokens
+            dummy_pos = Position(0, 0, 0, '<string>', '')
+            if ':' in token_str:
+                parts = token_str.split(':', 1)
+                token_type = parts[0]
+                # Try to parse value as int, float, or keep as string
+                value_str = parts[1]
+                try:
+                    if '.' in value_str:
+                        value = float(value_str)
+                    else:
+                        value = int(value_str)
+                except ValueError:
+                    value = value_str
+                # Create a token with dummy position
+                return Token(token_type, value, pos_start=dummy_pos)
+            else:
+                return Token(token_str, pos_start=dummy_pos)
+        
+        # Helper function to find matching closing parenthesis
+        def find_matching_paren(text, start_idx):
+            depth = 0
+            for i in range(start_idx, len(text)):
+                if text[i] == '(':
+                    depth += 1
+                elif text[i] == ')':
+                    depth -= 1
+                    if depth == 0:
+                        return i
+            return -1
+        
+        # Try to parse as a simple token (NumberNode) - no parentheses
+        if not text.startswith('('):
+            # Check if it's a token pattern (e.g., "TT_INT:2" or "TT_MUL")
+            if re.match(r'^TT_[A-Z_]+(:.+)?$', text):
+                tok = parse_token(text)
+                return NumberNode(tok)
+            else:
+                # Fallback: try to parse as a token anyway
+                tok = parse_token(text)
+                return NumberNode(tok)
+        
+        # Parse as BinOpNode or UnaryOpNode (both start with '(')
+        # Extract content inside the outermost parentheses
+        end_idx = find_matching_paren(text, 0)
+        if end_idx == -1:
+            raise ValueError(f"Unmatched parenthesis in: {text}")
+        
+        content = text[1:end_idx].strip()
+        
+        # Split content by spaces, but preserve parentheses groups
+        tokens = []
+        current_token = ""
+        paren_depth = 0
+        
+        i = 0
+        while i < len(content):
+            char = content[i]
+            if char == '(':
+                if paren_depth == 0 and current_token.strip():
+                    tokens.append(current_token.strip())
+                    current_token = ""
+                current_token += char
+                paren_depth += 1
+            elif char == ')':
+                current_token += char
+                paren_depth -= 1
+                if paren_depth == 0:
+                    tokens.append(current_token.strip())
+                    current_token = ""
+            elif char == ' ' and paren_depth == 0:
+                if current_token.strip():
+                    tokens.append(current_token.strip())
+                    current_token = ""
+            else:
+                current_token += char
+            i += 1
+        
+        if current_token.strip():
+            tokens.append(current_token.strip())
+        
+        tokens = [t for t in tokens if t]  # Remove empty tokens
+        
+        if len(tokens) == 2:
+            # UnaryOpNode: (op node)
+            op_tok = parse_token(tokens[0])
+            node = Parser.get_tree_from_string(tokens[1])
+            return UnaryOpNode(op_tok, node)
+        elif len(tokens) == 3:
+            # BinOpNode: (left op right)
+            left = Parser.get_tree_from_string(tokens[0])
+            op_tok = parse_token(tokens[1])
+            right = Parser.get_tree_from_string(tokens[2])
+            return BinOpNode(left, op_tok, right)
+        else:
+            raise ValueError(f"Unexpected number of tokens: {len(tokens)} in: {content}")
 
     def parse(self):
         res = self.expr()
