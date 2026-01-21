@@ -3,8 +3,8 @@ import json
 import os
 from util import *
 
-out_vocab_size = 2000  # Target (Spanish) vocabulary size
-in_vocab_size = 2000  # Source (English) vocabulary size - same as out so end tokens match
+out_vocab_size = 1000  # Target (Spanish) vocabulary size
+in_vocab_size = 1000  # Source (English) vocabulary size - same as out so end tokens match
 max_merge_pairs = 10_000
 
 def get_max_merge(my_merge):
@@ -65,7 +65,8 @@ def train_merges(toks, model_type, input_type, target_vocab_size=280):
     my_merges = {}  # pair => idx
     for i in range(target_vocab_size - idx - 2):  # Saves 2 tokens for START and END
         pair, pair_count = get_max_pair(ids)
-        print(f'merging {pair} into a new token {idx}')
+        decoded_pair = decode(pair, my_merges)
+        print(f'merging "{decode([pair[0]], my_merges)}" and "{decode([pair[1]], my_merges)}" into a new token "{decoded_pair}"')
         ids = merge(ids, pair, idx=idx)
         my_merges[pair] = idx
         idx += 1

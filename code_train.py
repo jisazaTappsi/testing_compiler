@@ -3,7 +3,6 @@ from torch.nn import functional as F
 
 import data
 from util import *
-from util import parenthesis_balance_weight
 
 torch.manual_seed(1337)
 
@@ -176,54 +175,6 @@ class CrossAttentionTransformer(nn.Module):
         pos_emb = position_table(torch.arange(T, device=device))
         return tok_emb + pos_emb
 
-    def compute_parenthesis_balance_loss(self, logits_2d, out_merges):
-        """
-        Compute auxiliary loss to encourage balanced parentheses from predicted logits.
-        
-        This function computes balance from the most likely predicted sequence (argmax)
-        and adds a penalty for imbalance. Note: Since decoding breaks the gradient chain,
-        this provides an indirect signal rather than direct gradients. However, the model
-        learns balance primarily through the cross-entropy loss on balanced training data.
-        
-        For a fully differentiable approach, we would need to compute expected parenthesis
-        counts from token probabilities, which is more complex with BPE encoding.
-        """
-        if parenthesis_balance_weight == 0:
-            return torch.tensor(0.0, device=device, requires_grad=False)
-        
-        B, T, C = logits_2d.shape
-        tokens = data.get_start_and_end_tokens('code')
-        
-        # Get predicted tokens (argmax) for balance computation
-        predicted_tokens = torch.argmax(logits_2d, dim=-1)  # (B, T)
-        
-        # Compute balance penalty (as a constant signal - gradients come from main loss)
-        total_imbalance_sq = 0.0
-        count = 0
-        
-        for b in range(B):
-            seq = predicted_tokens[b].cpu().tolist()
-            seq_clean = [int(t) for t in seq if t not in [tokens['start_out'], tokens['end_out']]]
-            if len(seq_clean) == 0:
-                continue
-            
-            try:
-                decoded = data.decode(seq_clean, out_merges)
-                open_count = decoded.count('(')
-                close_count = decoded.count(')')
-                imbalance = abs(open_count - close_count)
-                total_imbalance_sq += imbalance ** 2
-                count += 1
-            except:
-                continue
-        
-        if count == 0:
-            return torch.tensor(0.0, device=device, requires_grad=False)
-        
-        # Return as a constant (no gradients, but signals importance)
-        avg_penalty = total_imbalance_sq / count
-        return torch.tensor(parenthesis_balance_weight * avg_penalty, device=device, requires_grad=False)
-
     def forward(self, x_out, x_in, y=None):
         emb = CrossAttentionTransformer.get_embedding(x_out, token_table=self.emb_table,
                                                       position_table=self.position_emb_table)
@@ -242,17 +193,9 @@ class CrossAttentionTransformer(nn.Module):
             loss = None
         else:
             B, T, C = logits.shape
-            # Store original shape for balance loss computation
-            logits_2d = logits.clone()
             logits = logits.view(B*T, C)
             target = y.view(B*T)
             loss = F.cross_entropy(logits, target)
-            
-            # Add parenthesis balance auxiliary loss
-            if parenthesis_balance_weight > 0:
-                out_merges, _ = data.get_merges('code')
-                balance_loss = self.compute_parenthesis_balance_loss(logits_2d, out_merges)
-                loss = loss + balance_loss
 
         return logits, loss
 

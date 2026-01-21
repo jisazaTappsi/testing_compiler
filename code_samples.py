@@ -1,3 +1,5 @@
+import statistics
+
 import data
 from util import *
 from code_train import CrossAttentionTransformer, block_size
@@ -33,6 +35,7 @@ def run():
 
     # Run generation
     tokens = data.get_start_and_end_tokens('code')
+    scores = []
     for row in val_samples:
         context = torch.tensor([[tokens['start_out']]], dtype=torch.long, device=device)
         data_in = row['x_in']
@@ -45,8 +48,12 @@ def run():
         )
         print(f'O(#{translation.count('(') - translation.count(')')}): {translation}')
         data_out = sample_decode(row['x_out'], tokens, out_merges)
-        print(f"T(#{data_out.count('(') - data_out.count(')')}): {data_out}\n")
+        print(f"T(#{data_out.count('(') - data_out.count(')')}): {data_out}")
+        equal = translation == data_out
+        print(f'is equal: {equal}\n')
+        scores.append(int(equal))
 
+    print(f'Avg performance: {round(statistics.mean(scores)*100)}%')
 
 if __name__ == '__main__':
     run()
