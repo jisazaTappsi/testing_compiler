@@ -82,20 +82,17 @@ def generate_expr(depth=0, max_depth=5):
     return result
 
 
-def generate_valid_expression(max_length=None):
+def generate_valid_expression():
     """
     Generate a valid arithmetic expression that can be parsed.
     Optionally limit the length of the generated expression.
     """
-    if max_length is None:
-        max_length = block_size
-    
-    # Start with a reasonable max_depth based on block_size
-    # Deeper expressions tend to be longer
+    max_length = block_size
+
+    # Start with a reasonable max_depth based on block_size, Deeper expressions tend to be longer
     max_depth = min(5, max_length // 10)
-    
     expr = generate_expr(depth=0, max_depth=max_depth)
-    
+
     # If expression is too long, regenerate with lower max_depth
     while len(expr) > max_length:
         max_depth = max(1, max_depth - 1)
@@ -158,6 +155,7 @@ def generate():
                 invalid_count += 1
                 continue
             lexer_text = ' '.join(t.__repr__() for t in tokens)
+
             # Introduce random error with 50% probability
             has_error = introduce_error and random.random() < 0.5
             if has_error:
