@@ -2,13 +2,13 @@ import statistics
 
 import data
 import basic
-from basic import Parser
 from util import *
+from basic import Parser
 from code_train import CrossAttentionTransformer, block_size
 
 
 def get_sample_val_data(num=20):
-    rows = get_first_rows_fast('dataset.csv', max_pairs)
+    rows = get_first_rows_fast(dataset_name, max_pairs)
 
     n = int(train_split_ratio * len(rows))
 
@@ -25,9 +25,9 @@ def sample_decode(my_data, tokens, merges):
     return data.decode([e for e in my_data if e != tokens['end_in']], merges)
 
 
-def run():
+def run(num_samples=100):
     # Load data and merges
-    val_samples = get_sample_val_data(num=100)
+    val_samples = get_sample_val_data(num=num_samples)
     in_merges, out_merges = data.get_merges('code')
 
     model = CrossAttentionTransformer()
@@ -42,6 +42,7 @@ def run():
     for row in val_samples:
         context = torch.tensor([[tokens['start_out']]], dtype=torch.long, device=device)
         data_in = row['x_in']
+        has_error = row['has_error']
         print(f'I: {sample_decode(data_in, tokens, in_merges)}')
         predicted_ast_text = data.decode(
             model.generate(x_out=context,
@@ -53,33 +54,36 @@ def run():
         target_ast_text = sample_decode(row['x_out'], tokens, out_merges)
         print(f"T(#{target_ast_text.count('(') - target_ast_text.count(')')}): {target_ast_text}")
         equal = predicted_ast_text == target_ast_text
-        print(f'AST are equal: {equal}\n')
+        print(f'{has_error=}')
         tree_scores.append(int(equal))
 
         try:
             predicted_ast = Parser.get_tree_from_string(predicted_ast_text)
             predicted_res = basic.Interpreter().visit(predicted_ast)
             if predicted_res.error:
-                print(f'predicted_ast interpretation error: {predicted_res.error}')
+                print(f'predicted_ast interpretation error: {predicted_res.error}\n')
                 computation_scores.append(0)
                 continue
-            else:
-                print(f'predicted value: {predicted_res.value}')
         except Exception as e:
-            print(f'building/executing predicted AST gets: {e}, continuing...')
+            print(f'building/executing predicted AST gets: {e}, continuing...\n')
             computation_scores.append(0)
             continue
 
         target_ast = Parser.get_tree_from_string(target_ast_text)
         target_res = basic.Interpreter().visit(target_ast)
-        print(target_res.value)
 
-        is_close = torch.allclose(torch.tensor(float(predicted_res.value.value)), torch.tensor(float(target_res.value.value)))
+        try:
+            is_close = torch.allclose(torch.tensor(float(predicted_res.value.value)), torch.tensor(float(target_res.value.value)))
+        except Exception as e:
+            print(f'cannot compare target and predicted results: {e}')
+            is_close = False
+
         computation_scores.append(int(is_close))
-        print(f'computation is equal: {is_close}')
+        print(target_res.value)
+        print(f'AST are equal: {equal}, predicted: {predicted_res.value}, target: {target_res.value}, computation is equal: {is_close}\n')
 
     print(f'Avg performance tree_scores: {round(statistics.mean(tree_scores)*100)}%')
     print(f'Avg performance computation: {round(statistics.mean(computation_scores)*100)}%')
 
 if __name__ == '__main__':
-    run()
+    run(num_samples=100)

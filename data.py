@@ -122,14 +122,14 @@ def get_merges(model_type):
             return save_code_merges()
 
 
-def get_last_rows_fast(filename):
+def get_last_rows_fast(filename, max_pairs=10_000):
     with open(filename, 'rb') as f:  # Open in binary mode
         f.seek(0, os.SEEK_END)
         file_size = f.tell()
 
         # Estimate how many bytes to read (avg 100 bytes per line * max_merge_pairs)
         # We multiply by 2 or 4 to be safe and ensure we get enough lines
-        buffer_size = max_merge_pairs * 200
+        buffer_size = max_pairs * 400
 
         if buffer_size > file_size:
             f.seek(0)
@@ -140,14 +140,14 @@ def get_last_rows_fast(filename):
         chunk = f.read().decode('utf-8', errors='ignore')
 
         # Get the lines and take the last N
-        return chunk.splitlines()[-max_merge_pairs:]
+        return chunk.splitlines()[-max_pairs:]
 
 
 def load_lang_tokens():
-    es_sentences = get_last_rows_fast('OpenSubtitles.es')
+    es_sentences = get_last_rows_fast('OpenSubtitles.es', max_pairs=max_merge_pairs)
     es_text = ' '.join(es_sentences)
 
-    en_sentences = get_last_rows_fast('OpenSubtitles.en')
+    en_sentences = get_last_rows_fast('OpenSubtitles.en', max_pairs=max_merge_pairs)
     en_text = ' '.join(en_sentences)
 
     en_tokens = [int(i) for i in en_text.encode('utf-8')]
@@ -171,10 +171,9 @@ def save_lang_merges():
 
 
 def load_code_tokens():
-    with open('dataset.csv', 'r') as f:
-        reader = csv.reader(f)
-        lex_texts, ast_texts = zip(*[(row[0], row[1]) for idx, row in enumerate(reader) if idx < max_merge_pairs])
-    
+    lex_texts, ast_texts = zip(*[(row.split(',')[0], row.split(',')[1])
+                                 for row in get_last_rows_fast(dataset_name, max_pairs=max_merge_pairs)])
+
     lex_text = ' '.join(lex_texts)
     ast_text = ' '.join(ast_texts)
     
@@ -219,7 +218,7 @@ def get_code_pairs(rows, in_merges, out_merges, block_size, model_type):
     cut_size = block_size - 2  # 1 more token to divide it between x and y upstream on the get_batch method.
     tokens = get_start_and_end_tokens(model_type)
     for row in rows:
-        lex_sent, ast_sent, _ = row.split(',')
+        lex_sent, ast_sent, result, has_error, idx = row.split(',')
         lex_encoded = encode(lex_sent, in_merges)
         ast_encoded = encode(ast_sent, out_merges)
         # Truncate/pad to block_size
@@ -227,7 +226,7 @@ def get_code_pairs(rows, in_merges, out_merges, block_size, model_type):
         lex_encoded = [tokens['start_in']] + lex_encoded + [tokens['end_in']] * max(1, block_size - len(lex_encoded))
         ast_encoded = ast_encoded[:cut_size]
         ast_encoded = [tokens['start_out']] + ast_encoded + [tokens['end_out']] * max(1, block_size - len(ast_encoded))
-        pairs.append({'x_in': lex_encoded, 'x_out': ast_encoded})
+        pairs.append({'x_in': lex_encoded, 'x_out': ast_encoded, 'has_error': has_error, 'id': idx})
     return pairs
 
 
@@ -250,7 +249,7 @@ def get_lang_data():
 
 def get_code_data():
     """We translate from Lex to AST, ie our x_in=LEX, while x_out=AST"""
-    rows = get_first_rows_fast('dataset.csv', max_pairs)
+    rows = get_first_rows_fast(dataset_name, max_pairs)
     in_merges, out_merges = get_merges('code')
     pairs = get_code_pairs(rows, in_merges, out_merges, block_size, 'code')
 
@@ -265,4 +264,4 @@ def get_code_data():
 
 
 if __name__ == '__main__':
-    save_lang_merges()
+    save_code_merges()

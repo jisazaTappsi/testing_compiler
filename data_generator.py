@@ -5,6 +5,8 @@ import basic
 from util import *
 
 num_samples = 1_000_000
+chars_choices = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()[]{}|;:.<>?'
+introduce_error = False
 
 
 def generate_number():
@@ -103,15 +105,48 @@ def generate_valid_expression(max_length=None):
     return expr
 
 
+def introduce_random_error(text):
+    """
+    Introduce a random error to a string.
+    Errors can be: character substitution, deletion, insertion, or swap.
+    """
+    if len(text) == 0:
+        return text
+
+    error_type = random.choice(['substitute', 'delete', 'insert', 'swap'])
+    text_list = list(text)
+
+    if error_type == 'substitute':
+        # Substitute a random character
+        idx = random.randint(0, len(text_list) - 1)
+        # Replace with a random printable character
+        text_list[idx] = random.choice(chars_choices)
+    elif error_type == 'delete':
+        # Delete a random character
+        idx = random.randint(0, len(text_list) - 1)
+        text_list.pop(idx)
+    elif error_type == 'insert':
+        # Insert a random character at a random position
+        idx = random.randint(0, len(text_list))
+        text_list.insert(idx, random.choice(chars_choices))
+    elif error_type == 'swap' and len(text_list) > 1:
+        # Swap two adjacent characters
+        idx = random.randint(0, len(text_list) - 2)
+        text_list[idx], text_list[idx + 1] = text_list[idx + 1], text_list[idx]
+    
+    return ''.join(text_list)
+
+
 def generate():
     """Generate valid arithmetic expressions."""
     valid_count = 0
     invalid_count = 0
     dataset = []
-    
-    for i in range(num_samples):
-        if i % 100 == 0:
-            print(f"loaded: {(i/num_samples)*100:.2f}%")
+    lexer_texts = set()
+
+    for idx in range(num_samples):
+        if idx % 100 == 0:
+            print(f"loaded: {(idx/num_samples)*100:.2f}%")
         # Generate a valid expression
         text = generate_valid_expression()
 
@@ -124,7 +159,14 @@ def generate():
                 invalid_count += 1
                 continue
             lexer_text = ' '.join(t.__repr__() for t in tokens)
-            #print(lexer_text)
+            # Introduce random error with 50% probability
+            has_error = introduce_error and random.random() < 0.5
+            if has_error:
+                lexer_text = introduce_random_error(lexer_text)
+
+            if lexer_text in lexer_texts:
+                print('Lexer is duplicated, will continue...')
+                continue
 
             # Try to parse
             parser = basic.Parser(tokens)
@@ -133,7 +175,6 @@ def generate():
                 print('Parsing is invalid!')
                 invalid_count += 1
                 continue
-            #print(ast.node)
 
             interpreter = basic.Interpreter()
             res = interpreter.visit(ast.node)
@@ -141,16 +182,15 @@ def generate():
                 print('Interpretation is invalid!')
                 invalid_count += 1
                 continue
-            #print(res.value)
 
             valid_count += 1
-            dataset.append((lexer_text, ast.node, res.value))
+            dataset.append((lexer_text, ast.node, res.value, has_error, idx))
         except Exception as e:
             invalid_count += 1
             continue
 
     # Write dataset to CSV file once at the end
-    with open('dataset.csv', 'w', newline='') as csvfile:
+    with open(dataset_name, 'w', newline='') as csvfile:
         writer = csv.writer(csvfile)
         writer.writerows(dataset)
 

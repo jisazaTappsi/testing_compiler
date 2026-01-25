@@ -1,10 +1,10 @@
-import torch
-
 from util import *
 from lang_train import CrossAttentionTransformer
 
 data_to_params_ratio = 20
-avg_token_per_sentence = 6.5
+char_token_compression = 7
+avg_sentence_length = block_size / 2
+avg_token_per_sentence = avg_sentence_length/char_token_compression
 
 
 def count_parameters(model):
@@ -16,7 +16,7 @@ model = CrossAttentionTransformer()
 model = model.to(device)
 
 # Load the saved state dict
-model.load_state_dict(torch.load(lang_model_name))
+model.load_state_dict(torch.load(code_model_name))
 model.eval()
 
 param_count = count_parameters(model)

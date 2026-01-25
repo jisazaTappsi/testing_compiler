@@ -213,7 +213,7 @@ __marimo__/
 *.en
 
 lang_model.pth
-dataset.csv
+dataset*
 code_merges_in.json
 code_merges_out.json
-code_model.pth
+code_model*
