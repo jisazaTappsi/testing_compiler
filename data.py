@@ -171,8 +171,9 @@ def save_lang_merges():
 
 
 def load_code_tokens():
-    lex_texts, ast_texts = zip(*[(row.split(',')[0], row.split(',')[1])
-                                 for row in get_last_rows_fast(dataset_name, max_pairs=max_merge_pairs)])
+    rows = get_first_rows_fast(dataset_name, max_pairs)
+    train_rows = get_train_data(rows)[:max_merge_pairs]
+    lex_texts, ast_texts = zip(*[(row.split(',')[0], row.split(',')[1]) for row in train_rows])
 
     lex_text = ' '.join(lex_texts)
     ast_text = ' '.join(ast_texts)
@@ -226,7 +227,7 @@ def get_code_pairs(rows, in_merges, out_merges, block_size, model_type):
         lex_encoded = [tokens['start_in']] + lex_encoded + [tokens['end_in']] * max(1, block_size - len(lex_encoded))
         ast_encoded = ast_encoded[:cut_size]
         ast_encoded = [tokens['start_out']] + ast_encoded + [tokens['end_out']] * max(1, block_size - len(ast_encoded))
-        pairs.append({'x_in': lex_encoded, 'x_out': ast_encoded, 'has_error': has_error, 'id': idx})
+        pairs.append({'x_in': lex_encoded, 'x_out': ast_encoded, 'has_error': has_error == 'True', 'id': idx})
     return pairs
 
 
@@ -247,15 +248,24 @@ def get_lang_data():
     }, out_merges, in_merges
 
 
+def get_train_data(iterable):
+    n = int(train_split_ratio * len(iterable))
+    return iterable[:n]
+
+
+def get_val_data(iterable):
+    n = int(train_split_ratio * len(iterable))
+    return iterable[n:]
+
+
 def get_code_data():
     """We translate from Lex to AST, ie our x_in=LEX, while x_out=AST"""
     rows = get_first_rows_fast(dataset_name, max_pairs)
     in_merges, out_merges = get_merges('code')
     pairs = get_code_pairs(rows, in_merges, out_merges, block_size, 'code')
 
-    n = int(train_split_ratio * len(pairs))
-    train_pairs = pairs[:n]
-    val_pairs = pairs[n:]
+    train_pairs = get_train_data(pairs)
+    val_pairs = get_val_data(pairs)
     print(f'Training pairs: {len(train_pairs)}, Validation pairs: {len(val_pairs)}')
     return {
         'train': train_pairs,

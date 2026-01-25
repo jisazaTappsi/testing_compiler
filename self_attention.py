@@ -21,7 +21,7 @@ elif torch.backends.mps.is_available():
 else:
     device = 'cpu'
 
-torch.manual_seed(1337)
+torch.manual_seed(42)
 
 
 def get_batch(split):

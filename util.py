@@ -14,8 +14,9 @@ n_embed = 64 * n_head  # 32
 train_split_ratio = 0.8
 max_pairs = 1_000_000
 lang_model_name = 'lang_model.pth'
-code_model_name = 'code_model.pth' #'code_model_error.pth'
-dataset_name = 'dataset.csv'  # 'dataset_error.csv'
+code_model_name = 'code_model_error.pth' # 'code_model.pth'
+dataset_name = 'dataset_error.csv'  # 'dataset.csv'
+introduce_error = True
 
 if torch.cuda.is_available():
     device = 'cuda'

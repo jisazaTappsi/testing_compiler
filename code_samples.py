@@ -6,19 +6,31 @@ from util import *
 from basic import Parser
 from code_train import CrossAttentionTransformer, block_size
 
+# Set random seed for reproducibility
+torch.manual_seed(42)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed(42)
+elif torch.backends.mps.is_available():
+    torch.mps.manual_seed(42)
+
 
 def get_sample_val_data(num=20):
     rows = get_first_rows_fast(dataset_name, max_pairs)
 
-    n = int(train_split_ratio * len(rows))
-
     # Choose samples of validation data
-    val_rows = rows[n:]
+    val_rows = data.get_val_data(rows)
+
+    if introduce_error:
+        num *= 2
     random_val_ids = torch.randint(len(val_rows), (num,))
     random_val_rows = [val_rows[i] for i in random_val_ids]
 
     in_merges, out_merges = data.get_merges('code')
-    return data.get_code_pairs(random_val_rows, in_merges, out_merges, block_size, 'code')
+    pairs = data.get_code_pairs(random_val_rows, in_merges, out_merges, block_size, 'code')
+    if introduce_error:
+        return [e for e in pairs if e['has_error']]
+    else:
+        return pairs
 
 
 def sample_decode(my_data, tokens, merges):
@@ -50,11 +62,10 @@ def run(num_samples=100):
                            max_new_tokens=block_size)[0].tolist(),
             out_merges
         )
-        print(f'O(#{predicted_ast_text.count('(') - predicted_ast_text.count(')')}): {predicted_ast_text}')
+        print(f'P(#{predicted_ast_text.count('(') - predicted_ast_text.count(')')}): {predicted_ast_text}')
         target_ast_text = sample_decode(row['x_out'], tokens, out_merges)
         print(f"T(#{target_ast_text.count('(') - target_ast_text.count(')')}): {target_ast_text}")
         equal = predicted_ast_text == target_ast_text
-        print(f'{has_error=}')
         tree_scores.append(int(equal))
 
         try:
@@ -79,8 +90,7 @@ def run(num_samples=100):
             is_close = False
 
         computation_scores.append(int(is_close))
-        print(target_res.value)
-        print(f'AST are equal: {equal}, predicted: {predicted_res.value}, target: {target_res.value}, computation is equal: {is_close}\n')
+        print(f'{has_error=} | AST are equal: {equal} | predicted: {predicted_res.value} target: {target_res.value} | computation is equal: {is_close}\n')
 
     print(f'Avg performance tree_scores: {round(statistics.mean(tree_scores)*100)}%')
     print(f'Avg performance computation: {round(statistics.mean(computation_scores)*100)}%')

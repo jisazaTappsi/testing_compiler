@@ -6,7 +6,6 @@ from util import *
 
 num_samples = 1_000_000
 chars_choices = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()[]{}|;:.<>?'
-introduce_error = False
 
 
 def generate_number():
@@ -145,7 +144,7 @@ def generate():
     lexer_texts = set()
 
     for idx in range(num_samples):
-        if idx % 100 == 0:
+        if idx % 1_000 == 0:
             print(f"loaded: {(idx/num_samples)*100:.2f}%")
         # Generate a valid expression
         text = generate_valid_expression()

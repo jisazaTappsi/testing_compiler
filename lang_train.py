@@ -4,7 +4,7 @@ from torch.nn import functional as F
 import data
 from util import *
 
-torch.manual_seed(1337)
+torch.manual_seed(42)
 
 
 def get_batch(my_data):
