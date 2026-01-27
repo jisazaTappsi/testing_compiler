@@ -9,6 +9,7 @@ from strings_with_arrows import *
 ########################
 
 DIGITS = '0123456789'
+ABC = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
 ########################
 # ERRORS
@@ -76,6 +77,7 @@ TT_DIV = 'TT_DIV'
 TT_LPAREN = 'TT_LPAREN'
 TT_RPAREN = 'TT_RPAREN'
 TT_EOF = 'EOF'
+TT_ABC = 'TT_ABC'
 
 
 class Token:
@@ -136,6 +138,9 @@ class Lexer:
                 self.advance()
             elif self.current_char == ')':
                 tokens.append(Token(TT_RPAREN, pos_start=self.pos))
+                self.advance()
+            elif self.current_char in ABC:
+                tokens.append(Token(TT_ABC, pos_start=self.pos))
                 self.advance()
             else:
                 pos_start = self.pos.copy()

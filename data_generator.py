@@ -5,7 +5,7 @@ import basic
 from util import *
 
 num_samples = 1_000_000
-chars_choices = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()[]{}|;:.<>?'
+#chars_choices = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()[]{}|;:.<>?'
 
 
 def generate_number():
@@ -109,14 +109,17 @@ def introduce_random_error(text):
     if len(text) == 0:
         return text
 
-    error_type = random.choice(['substitute', 'delete', 'insert', 'swap'])
+    #error_type = random.choice(['substitute', 'delete', 'insert', 'swap'])
+    # IN arithmetic only inserting a non-arithmetic char makes sense, as any other operation would change the
+    # meaning of the program itself
+    error_type = random.choice(['insert', ])
     text_list = list(text)
 
     if error_type == 'substitute':
         # Substitute a random character
         idx = random.randint(0, len(text_list) - 1)
         # Replace with a random printable character
-        text_list[idx] = random.choice(chars_choices)
+        text_list[idx] = random.choice(basic.ABC)
     elif error_type == 'delete':
         # Delete a random character
         idx = random.randint(0, len(text_list) - 1)
@@ -124,7 +127,7 @@ def introduce_random_error(text):
     elif error_type == 'insert':
         # Insert a random character at a random position
         idx = random.randint(0, len(text_list))
-        text_list.insert(idx, random.choice(chars_choices))
+        text_list.insert(idx, random.choice(basic.ABC))
     elif error_type == 'swap' and len(text_list) > 1:
         # Swap two adjacent characters
         idx = random.randint(0, len(text_list) - 2)
@@ -145,9 +148,16 @@ def generate():
             print(f"loaded: {(idx/num_samples)*100:.2f}%")
         # Generate a valid expression
         text = generate_valid_expression()
+        text_error = text
+
+        # Introduce random error with 50% probability
+        has_error = introduce_error and random.random() < 0.5
+        if has_error:
+            text_error = introduce_random_error(text)
 
         # Verify it can be lexed and parsed
         lexer = basic.Lexer('<stdin>', text)
+        lexer_error = basic.Lexer('<stdin>', text_error)
         try:
             tokens, error = lexer.make_tokens()
             if error:
@@ -156,10 +166,12 @@ def generate():
                 continue
             lexer_text = ' '.join(t.__repr__() for t in tokens)
 
-            # Introduce random error with 50% probability
-            has_error = introduce_error and random.random() < 0.5
-            if has_error:
-                lexer_text = introduce_random_error(lexer_text)
+            tokens_error, error = lexer_error.make_tokens()
+            if error:
+                print('Lexing is invalid!')
+                invalid_count += 1
+                continue
+            lexer_text_error = ' '.join(t.__repr__() for t in tokens_error)
 
             if lexer_text in lexer_texts:
                 print('Lexer is duplicated, will continue...')
@@ -181,7 +193,7 @@ def generate():
                 continue
 
             valid_count += 1
-            dataset.append((lexer_text, ast.node, res.value, has_error, idx))
+            dataset.append((lexer_text_error, ast.node, res.value, has_error, idx))
         except Exception as e:
             invalid_count += 1
             continue
