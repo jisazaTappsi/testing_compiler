@@ -3,6 +3,10 @@
 ########################
 
 from strings_with_arrows import *
+import torch
+import data
+from util import device, block_size, code_model_name
+from code_train import CrossAttentionTransformer
 
 ########################
 # CONSTANTS
@@ -555,5 +559,78 @@ def run(fn, text):
     # Run
     interpreter = Interpreter()
     res = interpreter.visit(ast.node)
+
+    return res.value, res.error
+
+
+def inference(tokens):
+    """
+    Given lexer `tokens` (as produced by `Lexer.make_tokens`),
+    use the trained code transformer to predict an AST and
+    return the corresponding AST node.
+    """
+
+    # Recreate the lexer string exactly as in `data_generator.generate`
+    lex_text = ' '.join(t.__repr__() for t in tokens)
+
+    # 2) Load BPE merges and special tokens
+    in_merges, out_merges = data.get_merges('code')
+    special_tokens = data.get_start_and_end_tokens('code')
+
+    # 3) Encode lexer string exactly like `get_code_pairs` does
+    cut_size = block_size - 2
+    lex_encoded = data.encode(lex_text, in_merges)
+    lex_encoded = lex_encoded[:cut_size]
+    lex_encoded = (
+        [special_tokens['start_in']]
+        + lex_encoded
+        + [special_tokens['end_in']] * max(1, block_size - len(lex_encoded))
+    )
+
+    # 4) Build model input tensors
+    x_in = torch.tensor([lex_encoded], dtype=torch.long, device=device)
+    context = torch.tensor([[special_tokens['start_out']]], dtype=torch.long, device=device)
+
+    # 5) Load trained model and run generation
+    model = CrossAttentionTransformer().to(device)
+    try:
+        model.load_state_dict(torch.load(code_model_name, map_location=device))
+        model.eval()
+    except FileNotFoundError:
+        # If no model is available, fall back to the classic parser
+        parser = Parser(tokens)
+        ast = parser.parse()
+        return ast.node
+
+    with torch.no_grad():
+        generated = model.generate(x_out=context, x_in=x_in, max_new_tokens=block_size)[0].tolist()
+
+    # 6) Decode generated ids back into AST text and rebuild AST node
+    predicted_ast_text = data.decode(generated, out_merges)
+
+    try:
+        ast_node = Parser.get_tree_from_string(predicted_ast_text)
+    except Exception:
+        # If we cannot rebuild the tree, fall back to the standard parser
+        parser = Parser(tokens)
+        ast = parser.parse()
+        return ast.node
+
+    return ast_node
+
+
+def run_ai(fn, text):
+    lexer = Lexer(fn, text)
+    tokens, error = lexer.make_tokens()
+    if error: return None, error
+    print(tokens)
+
+    # Generate AST
+    ast_node = inference(tokens)
+    print(ast_node)
+
+    # Run
+    interpreter = Interpreter()
+    res = interpreter.visit(ast_node)
 
     return res.value, res.error

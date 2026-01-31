@@ -3,7 +3,7 @@ from itertools import islice
 import torch
 
 batch_size = 64 # 32
-block_size = 64 # 256
+block_size = 45 # 256
 max_iters = 5_000
 eval_interval = 500
 learning_rate = 3e-4 # 1e-4
@@ -13,7 +13,7 @@ n_head = 3  # 4
 n_embed = 64 * n_head  # 32
 train_split_ratio = 0.8
 max_pairs = 100_000
-introduce_error = False
+introduce_error = True
 lang_model_name = 'lang_model.pth'
 
 if introduce_error:

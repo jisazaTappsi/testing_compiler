@@ -60,13 +60,13 @@ def get_merge_filename(model_type, input_type):
 
 
 def train_merges(toks, model_type, input_type, target_vocab_size=280):
-    ids = list(toks)
+    ids = toks.copy()
     idx = 256
     my_merges = {}  # pair => idx
     for i in range(target_vocab_size - idx - 2):  # Saves 2 tokens for START and END
         pair, pair_count = get_max_pair(ids)
         decoded_pair = decode(pair, my_merges)
-        print(f'merging "{decode([pair[0]], my_merges)}" and "{decode([pair[1]], my_merges)}" into a new token "{decoded_pair}"')
+        print(f'Merging "{decode([pair[0]], my_merges)}", "{decode([pair[1]], my_merges)}" into: "{decoded_pair}"')
         ids = merge(ids, pair, idx=idx)
         my_merges[pair] = idx
         idx += 1
@@ -193,8 +193,8 @@ def save_code_merges():
         pass
 
     lex_tokens, ast_tokens = load_code_tokens()
-    in_merges = train_merges(lex_tokens, 'code', 'in', target_vocab_size=out_vocab_size)
-    out_merges = train_merges(ast_tokens, 'code', 'out', target_vocab_size=in_vocab_size)
+    in_merges = train_merges(lex_tokens + ast_tokens, 'code', 'in', target_vocab_size=out_vocab_size)
+    out_merges = train_merges(lex_tokens + ast_tokens, 'code', 'out', target_vocab_size=in_vocab_size)
     return in_merges, out_merges
 
 

@@ -25,3 +25,19 @@ token_count = data_to_params_ratio * param_count
 print(f'total params: {param_count}')
 print(f'Should train on {token_count} tokens')
 print(f'Should train on {round(token_count/avg_token_per_sentence)} sentences')
+
+rows = get_first_rows_fast(dataset_name, 100_000)
+
+import data
+import statistics
+
+in_merges, out_merges = data.get_merges('code')
+lens0 = [len(data.encode(r.split(',')[0], in_merges)) for r in rows]
+lens1 = [len(data.encode(r.split(',')[1], in_merges)) for r in rows]
+
+print(f'stats are: {statistics.mean(lens0)=}, {statistics.stdev(lens0)=}, {max(lens0)=}, {min(lens0)=}')
+print(f'stats are: {statistics.mean(lens1)=}, {statistics.stdev(lens1)=}, {max(lens1)=}, {min(lens1)=}')
+
+# cut below which 99.7% of samples lie.
+above_3_stdev = statistics.mean(lens1) + 3*statistics.stdev(lens1)
+print(f'block_size should be: {min(above_3_stdev, max(lens1))}')

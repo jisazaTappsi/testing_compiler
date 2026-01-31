@@ -37,7 +37,7 @@ def sample_decode(my_data, tokens, merges):
     return data.decode([e for e in my_data if e != tokens['end_in']], merges)
 
 
-def run(num_samples=100):
+def run(num_samples=250):
     # Load data and merges
     val_samples = get_sample_val_data(num=num_samples)
     in_merges, out_merges = data.get_merges('code')
@@ -96,4 +96,4 @@ def run(num_samples=100):
     print(f'Avg performance computation: {round(statistics.mean(computation_scores)*100)}%')
 
 if __name__ == '__main__':
-    run(num_samples=100)
+    run(num_samples=250)
