@@ -229,10 +229,11 @@ def train():
         print('Creating model from scratch')
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+    last_losses = None
     for iter in range(max_iters):
         if iter % eval_interval == 0:
-            losses = estimate_loss(dataset, model)
-            print(f"step {iter} train loss: {losses['train']:.4f}, val loss: {losses['val']:.4f}")
+            last_losses = estimate_loss(dataset, model)
+            print(f"step {iter} train loss: {last_losses['train']:.4f}, val loss: {last_losses['val']:.4f}")
         batch_dict = get_batch(dataset['train'])
         logits, loss = model(**batch_dict)
         optimizer.zero_grad(set_to_none=True)
@@ -242,6 +243,7 @@ def train():
     # Save the model after training
     torch.save(model.state_dict(), code_model_name)
     print(f"Model saved to {code_model_name}")
+    return last_losses['val']
 
 
 if __name__ == '__main__':
