@@ -1,11 +1,11 @@
-import csv
-import json
 import os
+import json
 from util import *
 
 out_vocab_size = 1000  # Target (Spanish) vocabulary size
 in_vocab_size = 1000  # Source (English) vocabulary size - same as out so end tokens match
 max_merge_pairs = 10_000
+
 
 def get_max_merge(my_merge):
     return max(my_merge.values()) if my_merge else 255
@@ -16,8 +16,8 @@ def get_start_and_end_tokens_as_list(my_merge):
     return [merge_max+1, merge_max+2]
 
 
-def get_start_and_end_tokens(model_type):
-    in_merges, out_merges = get_merges(model_type)
+def get_start_and_end_tokens():
+    in_merges, out_merges = get_merges()
     merge_max_in = get_max_merge(in_merges)
     merge_max_out = get_max_merge(out_merges)
     return {f'start_in': merge_max_in + 1, f'end_in': merge_max_in + 2,
@@ -55,11 +55,11 @@ def merge(ids, pair, idx):
     return new_ids
 
 
-def get_merge_filename(model_type, input_type):
-    return f'{model_type}_merges_{input_type}.json'
+def get_merge_filename(input_type):
+    return f'merges_{input_type}.json'
 
 
-def train_merges(toks, model_type, input_type, target_vocab_size=280):
+def train_merges(toks, input_type, target_vocab_size=280):
     ids = toks.copy()
     idx = 256
     my_merges = {}  # pair => idx
@@ -76,7 +76,7 @@ def train_merges(toks, model_type, input_type, target_vocab_size=280):
     print(f'compression: {round(len(toks) / len(ids), 2)}')
 
     # Convert tuple keys to strings for JSON
-    with open(get_merge_filename(model_type, input_type), 'w') as outfile:
+    with open(get_merge_filename(input_type), 'w') as outfile:
         json.dump({f'{k[0]},{k[1]}': v for k, v in my_merges.items()}, outfile)
 
     return my_merges
@@ -105,69 +105,18 @@ def get_vocab(merges):
     return vocab
 
 
-def get_merge(model_type, input_type):
-    with open(get_merge_filename(model_type, input_type), 'r') as file:
+def get_merge(input_type):
+    with open(get_merge_filename(input_type), 'r') as file:
         data = json.load(file)
         # Convert string keys back to tuples
         return {tuple(map(int, k.split(','))): v for k, v in data.items()}
 
 
-def get_merges(model_type):
+def get_merges():
     try:
-        return get_merge(model_type, 'in'), get_merge(model_type, 'out')
+        return get_merge('in'), get_merge('out')
     except FileNotFoundError:
-        if model_type == 'lang':
-            return save_lang_merges()
-        elif model_type == 'code':
-            return save_code_merges()
-
-
-def get_last_rows_fast(filename, max_pairs=10_000):
-    with open(filename, 'rb') as f:  # Open in binary mode
-        f.seek(0, os.SEEK_END)
-        file_size = f.tell()
-
-        # Estimate how many bytes to read (avg 100 bytes per line * max_merge_pairs)
-        # We multiply by 2 or 4 to be safe and ensure we get enough lines
-        buffer_size = max_pairs * 400
-
-        if buffer_size > file_size:
-            f.seek(0)
-        else:
-            f.seek(-buffer_size, os.SEEK_END)
-
-        # Read the chunk and decode to text
-        chunk = f.read().decode('utf-8', errors='ignore')
-
-        # Get the lines and take the last N
-        return chunk.splitlines()[-max_pairs:]
-
-
-def load_lang_tokens():
-    es_sentences = get_last_rows_fast('OpenSubtitles.es', max_pairs=max_merge_pairs)
-    es_text = ' '.join(es_sentences)
-
-    en_sentences = get_last_rows_fast('OpenSubtitles.en', max_pairs=max_merge_pairs)
-    en_text = ' '.join(en_sentences)
-
-    en_tokens = [int(i) for i in en_text.encode('utf-8')]
-    es_tokens = [int(i) for i in es_text.encode('utf-8')]
-    print(f'English tokens length: {len(en_tokens)}')
-    print(f'Spanish tokens length: {len(es_tokens)}')
-    return en_tokens, es_tokens
-
-
-def save_lang_merges():
-    # When recalculating merges needs to delete the model first, as it will lose the encoding :(
-    try:
-        os.remove(lang_model_name)
-    except FileNotFoundError:
-        pass
-
-    en_tokens, es_tokens = load_lang_tokens()
-    in_merges = train_merges(en_tokens, 'lang', 'in', target_vocab_size=out_vocab_size)
-    out_merges = train_merges(es_tokens, 'lang', 'out', target_vocab_size=in_vocab_size)
-    return in_merges, out_merges
+        return save_code_merges()
 
 
 def load_code_tokens():
@@ -193,31 +142,15 @@ def save_code_merges():
         pass
 
     lex_tokens, ast_tokens = load_code_tokens()
-    in_merges = train_merges(lex_tokens + ast_tokens, 'code', 'in', target_vocab_size=out_vocab_size)
-    out_merges = train_merges(lex_tokens + ast_tokens, 'code', 'out', target_vocab_size=in_vocab_size)
+    in_merges = train_merges(lex_tokens + ast_tokens, 'in', target_vocab_size=out_vocab_size)
+    out_merges = train_merges(lex_tokens + ast_tokens, 'out', target_vocab_size=in_vocab_size)
     return in_merges, out_merges
 
 
-def get_lang_pairs(in_sentences, out_sentences, in_merges, out_merges, block_size, model_type):
+def get_code_pairs(rows, in_merges, out_merges, block_size):
     pairs = []
     cut_size = block_size - 2  # 1 more token to divide it between x and y upstream on the get_batch method.
-    tokens = get_start_and_end_tokens(model_type)
-    for en_sent, es_sent in zip(in_sentences, out_sentences):
-        en_encoded = encode(en_sent, in_merges)
-        es_encoded = encode(es_sent, out_merges)
-        # Truncate/pad to block_size
-        en_encoded = en_encoded[:cut_size]
-        en_encoded = [tokens['start_in']] + en_encoded + [tokens['end_in']] * max(1, block_size - len(en_encoded))
-        es_encoded = es_encoded[:cut_size]
-        es_encoded = [tokens['start_out']] + es_encoded + [tokens['end_out']] * max(1, block_size - len(es_encoded))
-        pairs.append({'x_in': en_encoded, 'x_out': es_encoded})
-    return pairs
-
-
-def get_code_pairs(rows, in_merges, out_merges, block_size, model_type):
-    pairs = []
-    cut_size = block_size - 2  # 1 more token to divide it between x and y upstream on the get_batch method.
-    tokens = get_start_and_end_tokens(model_type)
+    tokens = get_start_and_end_tokens()
     for row in rows:
         lex_sent, ast_sent, result, has_error, idx = row.split(',')
         lex_encoded = encode(lex_sent, in_merges)
@@ -229,23 +162,6 @@ def get_code_pairs(rows, in_merges, out_merges, block_size, model_type):
         ast_encoded = [tokens['start_out']] + ast_encoded + [tokens['end_out']] * max(1, block_size - len(ast_encoded))
         pairs.append({'x_in': lex_encoded, 'x_out': ast_encoded, 'has_error': has_error == 'True', 'id': idx})
     return pairs
-
-
-def get_lang_data():
-    """We translate from EN to ES, ie our x_in=EN, while x_out=ES"""
-    in_sentences = get_first_rows_fast('OpenSubtitles.en', max_pairs)
-    out_sentences = get_first_rows_fast('OpenSubtitles.es', max_pairs)
-    in_merges, out_merges = get_merges('lang')
-    pairs = get_lang_pairs(in_sentences, out_sentences, in_merges, out_merges, block_size, 'lang')
-
-    n = int(train_split_ratio * len(in_sentences))
-    train_pairs = pairs[:n]
-    val_pairs = pairs[n:]
-    print(f'Training pairs: {len(train_pairs)}, Validation pairs: {len(val_pairs)}')
-    return {
-        'train': train_pairs,
-        'val': val_pairs
-    }, out_merges, in_merges
 
 
 def get_train_data(iterable):
@@ -261,8 +177,8 @@ def get_val_data(iterable):
 def get_code_data():
     """We translate from Lex to AST, ie our x_in=LEX, while x_out=AST"""
     rows = get_first_rows_fast(dataset_name, max_pairs)
-    in_merges, out_merges = get_merges('code')
-    pairs = get_code_pairs(rows, in_merges, out_merges, block_size, 'code')
+    in_merges, out_merges = get_merges()
+    pairs = get_code_pairs(rows, in_merges, out_merges, block_size)
 
     train_pairs = get_train_data(pairs)
     val_pairs = get_val_data(pairs)

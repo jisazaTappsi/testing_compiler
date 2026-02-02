@@ -574,8 +574,8 @@ def inference(tokens):
     lex_text = ' '.join(t.__repr__() for t in tokens)
 
     # 2) Load BPE merges and special tokens
-    in_merges, out_merges = data.get_merges('code')
-    special_tokens = data.get_start_and_end_tokens('code')
+    in_merges, out_merges = data.get_merges()
+    special_tokens = data.get_start_and_end_tokens()
 
     # 3) Encode lexer string exactly like `get_code_pairs` does
     cut_size = block_size - 2

@@ -2,7 +2,7 @@ import data
 import statistics
 
 from util import *
-from lang_train import CrossAttentionTransformer
+from code_train import CrossAttentionTransformer
 
 data_to_params_ratio = 20
 
@@ -23,7 +23,7 @@ param_count = count_parameters(model)
 token_count = data_to_params_ratio * param_count
 rows = get_first_rows_fast(dataset_name, 10_000)
 
-in_merges, out_merges = data.get_merges('code')
+in_merges, out_merges = data.get_merges()
 lens0 = [len(data.encode(r.split(',')[0], in_merges)) for r in rows]
 lens1 = [len(data.encode(r.split(',')[1], in_merges)) for r in rows]
 avg_tokens_per_sentence = statistics.mean(lens1)

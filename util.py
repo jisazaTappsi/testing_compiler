@@ -14,10 +14,9 @@ n_embed = 64 * n_head  # 32
 train_split_ratio = 0.8
 max_pairs = 100_000
 introduce_error = True
-lang_model_name = 'lang_model.pth'
 
 if introduce_error:
-    code_model_name = 'code_model_error.pth'
+    code_model_name = 'model_error.pth'
     dataset_name = 'dataset_error.csv'
 else:
     code_model_name = 'code_model.pth'

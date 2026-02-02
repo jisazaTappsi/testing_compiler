@@ -201,7 +201,7 @@ class CrossAttentionTransformer(nn.Module):
 
     def generate(self, x_out, x_in=None, max_new_tokens=100):
         self.eval()
-        tokens = data.get_start_and_end_tokens('code')
+        tokens = data.get_start_and_end_tokens()
         with torch.no_grad():
             for _ in range(max_new_tokens):
                 x_window = x_out[:, -block_size:]

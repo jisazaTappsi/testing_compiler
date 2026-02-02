@@ -212,8 +212,7 @@ __marimo__/
 *.es
 *.en
 
-lang_model.pth
 dataset*
-code_merges_in.json
-code_merges_out.json
-code_model*
+merges_in.json
+merges_out.json
+model*

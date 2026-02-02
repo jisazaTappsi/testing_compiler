@@ -25,8 +25,8 @@ def get_sample_val_data(num=20):
     random_val_ids = torch.randint(len(val_rows), (num,))
     random_val_rows = [val_rows[i] for i in random_val_ids]
 
-    in_merges, out_merges = data.get_merges('code')
-    pairs = data.get_code_pairs(random_val_rows, in_merges, out_merges, block_size, 'code')
+    in_merges, out_merges = data.get_merges()
+    pairs = data.get_code_pairs(random_val_rows, in_merges, out_merges, block_size)
     if introduce_error:
         return [e for e in pairs if e['has_error']]
     else:
@@ -40,7 +40,7 @@ def sample_decode(my_data, tokens, merges):
 def run(num_samples=250):
     # Load data and merges
     val_samples = get_sample_val_data(num=num_samples)
-    in_merges, out_merges = data.get_merges('code')
+    in_merges, out_merges = data.get_merges()
 
     model = CrossAttentionTransformer()
     model = model.to(device)
@@ -48,7 +48,7 @@ def run(num_samples=250):
     model.eval()
 
     # Run generation
-    tokens = data.get_start_and_end_tokens('code')
+    tokens = data.get_start_and_end_tokens()
     tree_scores = []
     computation_scores = []
     for row in val_samples:
