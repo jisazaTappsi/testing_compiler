@@ -1,14 +1,22 @@
 import os
 import json
+
+import tokens
 from util import *
 
 out_vocab_size = 1000  # Target (Spanish) vocabulary size
 in_vocab_size = 1000  # Source (English) vocabulary size - same as out so end tokens match
 max_merge_pairs = 10_000
+TOKEN_INTS = {
+    256 + idx: ','.join(str(int(i)) for i in t.encode('utf-8')) for idx, t in enumerate(tokens.TOKENS)
+}
+TOKEN_BYTES = {
+    256 + idx: bytes(int(i) for i in t.encode('utf-8')) for idx, t in enumerate(tokens.TOKENS)
+}
 
 
 def get_max_merge(my_merge):
-    return max(my_merge.values()) if my_merge else 255
+    return max(my_merge.values()) if my_merge else 255 + len(TOKEN_BYTES)
 
 
 def get_start_and_end_tokens_as_list(my_merge):
@@ -61,7 +69,7 @@ def get_merge_filename(input_type):
 
 def train_merges(toks, input_type, target_vocab_size=280):
     ids = toks.copy()
-    idx = 256
+    idx = 256 + len(TOKEN_BYTES)
     my_merges = {}  # pair => idx
     for i in range(target_vocab_size - idx - 2):  # Saves 2 tokens for START and END
         pair, pair_count = get_max_pair(ids)
@@ -88,7 +96,7 @@ def decode(ids, my_merges):
     return toks.decode('utf-8', errors='replace')
 
 def encode(string, my_merges):
-    toks = list(string.encode('utf-8'))
+    toks = get_compressed_tokens(string)
     while len(toks) > 1:
         stats = get_stats(toks)
         pair = min(stats, key=lambda p: my_merges.get(p, float('inf')))
@@ -100,6 +108,7 @@ def encode(string, my_merges):
 
 def get_vocab(merges):
     vocab = {idx: bytes([idx]) for idx in range(256)}
+    vocab |= TOKEN_BYTES
     for (p0, p1), idx  in merges.items():
         vocab[idx] = vocab[p0] + vocab[p1]
     return vocab
@@ -119,6 +128,13 @@ def get_merges():
         return save_code_merges()
 
 
+def get_compressed_tokens(text):
+    tokens_text = ','.join(str(int(i)) for i in text.encode('utf-8'))
+    for token_id, token  in TOKEN_INTS.items():
+        tokens_text = tokens_text.replace(token, str(token_id))
+    return [int(i) for i in tokens_text.split(',')]
+
+
 def load_code_tokens():
     rows = get_first_rows_fast(dataset_name, max_pairs)
     train_rows = get_train_data(rows)[:max_merge_pairs]
@@ -126,9 +142,9 @@ def load_code_tokens():
 
     lex_text = ' '.join(lex_texts)
     ast_text = ' '.join(ast_texts)
-    
-    lex_tokens = [int(i) for i in lex_text.encode('utf-8')]
-    ast_tokens = [int(i) for i in ast_text.encode('utf-8')]
+
+    lex_tokens = get_compressed_tokens(lex_text)
+    ast_tokens = get_compressed_tokens(ast_text)
     print(f'Lex tokens length: {len(lex_tokens)}')
     print(f'AST tokens length: {len(ast_tokens)}')
     return lex_tokens, ast_tokens

@@ -71,17 +71,7 @@ class Position:
 ########################
 # TOKENS
 ########################
-
-TT_INT = 'TT_INT'
-TT_FLOAT = 'TT_FLOAT'
-TT_PLUS = 'TT_PLUS'
-TT_MINUS = 'TT_MINUS'
-TT_MUL = 'TT_MUL'
-TT_DIV = 'TT_DIV'
-TT_LPAREN = 'TT_LPAREN'
-TT_RPAREN = 'TT_RPAREN'
-TT_EOF = 'EOF'
-TT_ABC = 'TT_ABC'
+from tokens import *
 
 
 class Token:

@@ -3,7 +3,7 @@ from itertools import islice
 import torch
 
 batch_size = 64 # 32
-block_size = 45 # 256
+block_size = 64 # 256
 max_iters = 5_000
 eval_interval = 500
 learning_rate = 3e-4 # 1e-4

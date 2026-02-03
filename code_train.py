@@ -243,7 +243,7 @@ def train():
     # Save the model after training
     torch.save(model.state_dict(), code_model_name)
     print(f"Model saved to {code_model_name}")
-    return last_losses['val']
+    return last_losses['val'].item()
 
 
 if __name__ == '__main__':
