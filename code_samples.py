@@ -2,6 +2,7 @@ import statistics
 
 import data
 import basic
+from tokens import *
 from util import *
 from basic import Parser
 from code_train import CrossAttentionTransformer, block_size
@@ -33,8 +34,8 @@ def get_sample_val_data(num=20):
         return pairs
 
 
-def sample_decode(my_data, tokens, merges):
-    return data.decode([e for e in my_data if e != tokens['end_in']], merges)
+def sample_decode(my_data, merges):
+    return data.decode(my_data, merges)
 
 
 def run(num_samples=250):
@@ -48,14 +49,13 @@ def run(num_samples=250):
     model.eval()
 
     # Run generation
-    tokens = data.get_start_and_end_tokens()
     tree_scores = []
     computation_scores = []
     for row in val_samples:
-        context = torch.tensor([[tokens['start_out']]], dtype=torch.long, device=device)
+        context = torch.tensor([[TOKEN_IDS[TT_SOF]]], dtype=torch.long, device=device)
         data_in = row['x_in']
         has_error = row['has_error']
-        print(f'I: {sample_decode(data_in, tokens, in_merges)}')
+        print(f'I: {sample_decode(data_in, in_merges)}')
         predicted_ast_text = data.decode(
             model.generate(x_out=context,
                            x_in=torch.tensor([data_in], dtype=torch.long, device=device),
@@ -63,7 +63,7 @@ def run(num_samples=250):
             out_merges
         )
         print(f'P(#{predicted_ast_text.count('(') - predicted_ast_text.count(')')}): {predicted_ast_text}')
-        target_ast_text = sample_decode(row['x_out'], tokens, out_merges)
+        target_ast_text = sample_decode(row['x_out'], out_merges)
         print(f"T(#{target_ast_text.count('(') - target_ast_text.count(')')}): {target_ast_text}")
         equal = predicted_ast_text == target_ast_text
         tree_scores.append(int(equal))
@@ -84,7 +84,8 @@ def run(num_samples=250):
         target_res = basic.Interpreter().visit(target_ast)
 
         try:
-            is_close = torch.allclose(torch.tensor(float(predicted_res.value.value)), torch.tensor(float(target_res.value.value)))
+            is_close = torch.allclose(torch.tensor(float(predicted_res.value.value)),
+                                      torch.tensor(float(target_res.value.value)))
         except Exception as e:
             print(f'cannot compare target and predicted results: {e}')
             is_close = False
@@ -93,7 +94,10 @@ def run(num_samples=250):
         print(f'{has_error=} | AST are equal: {equal} | predicted: {predicted_res.value} target: {target_res.value} | computation is equal: {is_close}\n')
 
     print(f'Avg performance tree_scores: {round(statistics.mean(tree_scores)*100)}%')
-    print(f'Avg performance computation: {round(statistics.mean(computation_scores)*100)}%')
+    computation_percentage = statistics.mean(computation_scores) * 100
+    print(f'Avg performance computation: {round(computation_percentage)}%')
+    return computation_percentage
+
 
 if __name__ == '__main__':
     run(num_samples=250)

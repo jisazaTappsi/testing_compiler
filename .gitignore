@@ -213,6 +213,5 @@ __marimo__/
 *.en
 
 dataset*
-merges_in.json
-merges_out.json
+merges_*.json
 model*

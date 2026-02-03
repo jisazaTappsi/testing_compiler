@@ -1,7 +1,6 @@
 ########################
 # IMPORTS
 ########################
-
 from strings_with_arrows import *
 import torch
 import data
@@ -109,7 +108,7 @@ class Lexer:
         self.current_char = self.text[self.pos.idx] if self.pos.idx < len(self.text) else None
 
     def make_tokens(self):
-        tokens = []
+        tokens = [Token(TT_SOF), ]
         while self.current_char is not None:
             if self.current_char in [' ', '\t']:
                 self.advance()
@@ -356,6 +355,9 @@ class Parser:
             raise ValueError(f"Unexpected number of tokens: {len(tokens)} in: {content}")
 
     def parse(self):
+        if self.current_tok.type == TT_SOF:
+            self.advance()
+
         res = self.expr()
         if not res.error and self.current_tok.type != TT_EOF:
             return res.failure(InvalidSyntaxError(
@@ -553,33 +555,26 @@ def run(fn, text):
     return res.value, res.error
 
 
-def inference(tokens):
+def inference(token_list):
     """
-    Given lexer `tokens` (as produced by `Lexer.make_tokens`),
+    Given lexer `token_list` (as produced by `Lexer.make_tokens`),
     use the trained code transformer to predict an AST and
     return the corresponding AST node.
     """
 
     # Recreate the lexer string exactly as in `data_generator.generate`
-    lex_text = ' '.join(t.__repr__() for t in tokens)
+    lex_text = ' '.join(t.__repr__() for t in token_list)
 
     # 2) Load BPE merges and special tokens
     in_merges, out_merges = data.get_merges()
-    special_tokens = data.get_start_and_end_tokens()
 
     # 3) Encode lexer string exactly like `get_code_pairs` does
-    cut_size = block_size - 2
     lex_encoded = data.encode(lex_text, in_merges)
-    lex_encoded = lex_encoded[:cut_size]
-    lex_encoded = (
-        [special_tokens['start_in']]
-        + lex_encoded
-        + [special_tokens['end_in']] * max(1, block_size - len(lex_encoded))
-    )
+    lex_encoded = data.add_pad_tokens_and_trim(lex_encoded, block_size)
 
     # 4) Build model input tensors
     x_in = torch.tensor([lex_encoded], dtype=torch.long, device=device)
-    context = torch.tensor([[special_tokens['start_out']]], dtype=torch.long, device=device)
+    context = torch.tensor([[TOKEN_IDS[TT_SOF]]], dtype=torch.long, device=device)
 
     # 5) Load trained model and run generation
     model = CrossAttentionTransformer().to(device)
@@ -588,7 +583,7 @@ def inference(tokens):
         model.eval()
     except FileNotFoundError:
         # If no model is available, fall back to the classic parser
-        parser = Parser(tokens)
+        parser = Parser(token_list)
         ast = parser.parse()
         return ast.node
 
@@ -602,7 +597,7 @@ def inference(tokens):
         ast_node = Parser.get_tree_from_string(predicted_ast_text)
     except Exception:
         # If we cannot rebuild the tree, fall back to the standard parser
-        parser = Parser(tokens)
+        parser = Parser(token_list)
         ast = parser.parse()
         return ast.node
 
@@ -611,12 +606,12 @@ def inference(tokens):
 
 def run_ai(fn, text):
     lexer = Lexer(fn, text)
-    tokens, error = lexer.make_tokens()
+    token_list, error = lexer.make_tokens()
     if error: return None, error
-    print(tokens)
+    print(token_list)
 
     # Generate AST
-    ast_node = inference(tokens)
+    ast_node = inference(token_list)
     print(ast_node)
 
     # Run

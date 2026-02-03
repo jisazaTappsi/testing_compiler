@@ -2,6 +2,7 @@ import csv
 import random
 
 import basic
+import tokens
 from util import *
 
 num_samples = 1_000_000
@@ -159,12 +160,12 @@ def generate():
         lexer = basic.Lexer('<stdin>', text)
         lexer_error = basic.Lexer('<stdin>', text_error)
         try:
-            tokens, error = lexer.make_tokens()
+            token_list, error = lexer.make_tokens()
             if error:
                 print('Lexing is invalid!')
                 invalid_count += 1
                 continue
-            lexer_text = ' '.join(t.__repr__() for t in tokens)
+            lexer_text = ' '.join(t.__repr__() for t in token_list)
 
             tokens_error, error = lexer_error.make_tokens()
             if error:
@@ -178,7 +179,7 @@ def generate():
                 continue
 
             # Try to parse
-            parser = basic.Parser(tokens)
+            parser = basic.Parser(token_list)
             ast = parser.parse()
             if ast.error:
                 print('Parsing is invalid!')
@@ -193,7 +194,7 @@ def generate():
                 continue
 
             valid_count += 1
-            dataset.append((lexer_text_error, ast.node, res.value, has_error, idx))
+            dataset.append((lexer_text_error, f'{tokens.TT_SOF} {ast.node} {tokens.TT_EOF}', res.value, has_error, idx))
         except Exception as e:
             invalid_count += 1
             continue

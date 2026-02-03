@@ -1,35 +1,12 @@
 import os
 import json
 
-import tokens
+from tokens import *
 from util import *
 
-out_vocab_size = 1000  # Target (Spanish) vocabulary size
-in_vocab_size = 1000  # Source (English) vocabulary size - same as out so end tokens match
+lex_vocab_size = 500  # Source (English) vocabulary size - same as out so end tokens match
+ast_vocab_size = 500  # Target (Spanish) vocabulary size
 max_merge_pairs = 10_000
-TOKEN_INTS = {
-    256 + idx: ','.join(str(int(i)) for i in t.encode('utf-8')) for idx, t in enumerate(tokens.TOKENS)
-}
-TOKEN_BYTES = {
-    256 + idx: bytes(int(i) for i in t.encode('utf-8')) for idx, t in enumerate(tokens.TOKENS)
-}
-
-
-def get_max_merge(my_merge):
-    return max(my_merge.values()) if my_merge else 255 + len(TOKEN_BYTES)
-
-
-def get_start_and_end_tokens_as_list(my_merge):
-    merge_max = get_max_merge(my_merge)
-    return [merge_max+1, merge_max+2]
-
-
-def get_start_and_end_tokens():
-    in_merges, out_merges = get_merges()
-    merge_max_in = get_max_merge(in_merges)
-    merge_max_out = get_max_merge(out_merges)
-    return {f'start_in': merge_max_in + 1, f'end_in': merge_max_in + 2,
-            f'start_out': merge_max_out + 1, f'end_out': merge_max_out + 2}
 
 
 def get_max_pair(ids):
@@ -91,8 +68,7 @@ def train_merges(toks, input_type, target_vocab_size=280):
 
 def decode(ids, my_merges):
     vocab = get_vocab(my_merges)
-    tokens = get_start_and_end_tokens_as_list(my_merges)
-    toks = b''.join(vocab[i] for i in ids if i not in tokens)
+    toks = b''.join(vocab[i] for i in ids if i not in (TOKEN_IDS[TT_SOF], TOKEN_IDS[TT_EOF], TOKEN_IDS[TT_PAD]))
     return toks.decode('utf-8', errors='replace')
 
 def encode(string, my_merges):
@@ -123,14 +99,14 @@ def get_merge(input_type):
 
 def get_merges():
     try:
-        return get_merge('in'), get_merge('out')
+        return get_merge('lex'), get_merge('ast')
     except FileNotFoundError:
         return save_code_merges()
 
 
 def get_compressed_tokens(text):
     tokens_text = ','.join(str(int(i)) for i in text.encode('utf-8'))
-    for token_id, token  in TOKEN_INTS.items():
+    for token_id, token  in TOKEN_BASIC_IDS.items():
         tokens_text = tokens_text.replace(token, str(token_id))
     return [int(i) for i in tokens_text.split(',')]
 
@@ -158,24 +134,28 @@ def save_code_merges():
         pass
 
     lex_tokens, ast_tokens = load_code_tokens()
-    in_merges = train_merges(lex_tokens + ast_tokens, 'in', target_vocab_size=out_vocab_size)
-    out_merges = train_merges(lex_tokens + ast_tokens, 'out', target_vocab_size=in_vocab_size)
-    return in_merges, out_merges
+    lex_merges = train_merges(lex_tokens + ast_tokens, 'lex', target_vocab_size=ast_vocab_size)
+    ast_merges = train_merges(ast_tokens + lex_tokens, 'ast', target_vocab_size=lex_vocab_size)
+    return lex_merges, ast_merges
+
+
+def add_pad_tokens_and_trim(ids, block_size):
+    """the +1 more token to divide it between x and y upstream on the get_batch method."""
+
+    # Truncate/pad to block_size
+    ids = ids[:block_size]
+    return ids + [TOKEN_IDS[TT_PAD]] * max(0, block_size - len(ids) + 1)
 
 
 def get_code_pairs(rows, in_merges, out_merges, block_size):
     pairs = []
-    cut_size = block_size - 2  # 1 more token to divide it between x and y upstream on the get_batch method.
-    tokens = get_start_and_end_tokens()
     for row in rows:
         lex_sent, ast_sent, result, has_error, idx = row.split(',')
         lex_encoded = encode(lex_sent, in_merges)
         ast_encoded = encode(ast_sent, out_merges)
-        # Truncate/pad to block_size
-        lex_encoded = lex_encoded[:cut_size]
-        lex_encoded = [tokens['start_in']] + lex_encoded + [tokens['end_in']] * max(1, block_size - len(lex_encoded))
-        ast_encoded = ast_encoded[:cut_size]
-        ast_encoded = [tokens['start_out']] + ast_encoded + [tokens['end_out']] * max(1, block_size - len(ast_encoded))
+        lex_encoded = add_pad_tokens_and_trim(lex_encoded, block_size)
+        ast_encoded = add_pad_tokens_and_trim(ast_encoded, block_size)
+
         pairs.append({'x_in': lex_encoded, 'x_out': ast_encoded, 'has_error': has_error == 'True', 'id': idx})
     return pairs
 

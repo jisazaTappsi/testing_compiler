@@ -3,6 +3,7 @@ from torch.nn import functional as F
 
 import data
 from util import *
+from tokens import *
 
 torch.manual_seed(42)
 
@@ -153,11 +154,11 @@ class CrossAttentionTransformer(nn.Module):
     def __init__(self):
         super().__init__()
         # Main branch embeddings
-        self.emb_table = nn.Embedding(num_embeddings=data.out_vocab_size, embedding_dim=n_embed)
+        self.emb_table = nn.Embedding(num_embeddings=data.ast_vocab_size, embedding_dim=n_embed)
         self.position_emb_table = nn.Embedding(num_embeddings=block_size, embedding_dim=n_embed)
 
         # Cross branch embeddings
-        self.emb_table_cross = nn.Embedding(num_embeddings=data.in_vocab_size, embedding_dim=n_embed)
+        self.emb_table_cross = nn.Embedding(num_embeddings=data.lex_vocab_size, embedding_dim=n_embed)
         self.position_emb_table_cross = nn.Embedding(num_embeddings=block_size, embedding_dim=n_embed)
 
         self.blocks = nn.ModuleList([
@@ -166,7 +167,7 @@ class CrossAttentionTransformer(nn.Module):
             BlockCross(n_embed, n_head=n_head),
         ])
         self.ln_final = nn.LayerNorm(n_embed)
-        self.lm_head = nn.Linear(n_embed, data.out_vocab_size)
+        self.lm_head = nn.Linear(n_embed, data.ast_vocab_size)
 
     @staticmethod
     def get_embedding(x, token_table, position_table):
@@ -201,7 +202,6 @@ class CrossAttentionTransformer(nn.Module):
 
     def generate(self, x_out, x_in=None, max_new_tokens=100):
         self.eval()
-        tokens = data.get_start_and_end_tokens()
         with torch.no_grad():
             for _ in range(max_new_tokens):
                 x_window = x_out[:, -block_size:]
@@ -209,7 +209,7 @@ class CrossAttentionTransformer(nn.Module):
                 logits = logits[:, -1, :]  # last element in T dim (B, C)
                 probs = F.softmax(logits, dim=-1)
                 x_next = torch.multinomial(probs, num_samples=1)  # (B, 1)
-                if x_next.item() == tokens['end_out']:
+                if x_next.item() == TOKEN_IDS[TT_EOF]:
                     break
                 x_out = torch.cat((x_out, x_next), dim=1)  # (B, T+1)
         self.train()

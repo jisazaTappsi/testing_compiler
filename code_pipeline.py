@@ -9,8 +9,9 @@ data.save_code_merges()
 start = time.time()
 last_val_loss = code_train.train()
 end = time.time()
-code_samples.run()
-duration = end - start
-print(f'It took: {round(duration)}s')
+computation_percentage = code_samples.run()
+duration_minutes = (end - start) / 60
+print(f'It took: {round(duration_minutes, 1)} min')
 print(f'{last_val_loss=}')
-print(f'time-complexity score: {1 / (last_val_loss*duration)}')
+print(f'time-complexity score: {1 / (last_val_loss * duration_minutes)}')
+print(f'time-complexity computation score: { computation_percentage / duration_minutes }')
