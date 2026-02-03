@@ -566,10 +566,10 @@ def inference(token_list):
     lex_text = ' '.join(t.__repr__() for t in token_list)
 
     # 2) Load BPE merges and special tokens
-    in_merges, out_merges = data.get_merges()
+    lex_merges, ast_merges = data.get_merges()
 
     # 3) Encode lexer string exactly like `get_code_pairs` does
-    lex_encoded = data.encode(lex_text, in_merges)
+    lex_encoded = data.encode(lex_text, lex_merges)
     lex_encoded = data.add_pad_tokens_and_trim(lex_encoded, block_size)
 
     # 4) Build model input tensors
@@ -591,7 +591,7 @@ def inference(token_list):
         generated = model.generate(x_out=context, x_in=x_in, max_new_tokens=block_size)[0].tolist()
 
     # 6) Decode generated ids back into AST text and rebuild AST node
-    predicted_ast_text = data.decode(generated, out_merges)
+    predicted_ast_text = data.decode(generated, ast_merges)
 
     try:
         ast_node = Parser.get_tree_from_string(predicted_ast_text)

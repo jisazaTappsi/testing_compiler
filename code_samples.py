@@ -26,8 +26,8 @@ def get_sample_val_data(num=20):
     random_val_ids = torch.randint(len(val_rows), (num,))
     random_val_rows = [val_rows[i] for i in random_val_ids]
 
-    in_merges, out_merges = data.get_merges()
-    pairs = data.get_code_pairs(random_val_rows, in_merges, out_merges, block_size)
+    lex_merges, ast_merges = data.get_merges()
+    pairs = data.get_code_pairs(random_val_rows, lex_merges, ast_merges, block_size)
     if introduce_error:
         return [e for e in pairs if e['has_error']]
     else:
@@ -41,7 +41,7 @@ def sample_decode(my_data, merges):
 def run(num_samples=250):
     # Load data and merges
     val_samples = get_sample_val_data(num=num_samples)
-    in_merges, out_merges = data.get_merges()
+    lex_merges, ast_merges = data.get_merges()
 
     model = CrossAttentionTransformer()
     model = model.to(device)
@@ -55,15 +55,15 @@ def run(num_samples=250):
         context = torch.tensor([[TOKEN_IDS[TT_SOF]]], dtype=torch.long, device=device)
         data_in = row['x_in']
         has_error = row['has_error']
-        print(f'I: {sample_decode(data_in, in_merges)}')
+        print(f'I: {sample_decode(data_in, lex_merges)}')
         predicted_ast_text = data.decode(
             model.generate(x_out=context,
                            x_in=torch.tensor([data_in], dtype=torch.long, device=device),
                            max_new_tokens=block_size)[0].tolist(),
-            out_merges
+            ast_merges
         )
         print(f'P(#{predicted_ast_text.count('(') - predicted_ast_text.count(')')}): {predicted_ast_text}')
-        target_ast_text = sample_decode(row['x_out'], out_merges)
+        target_ast_text = sample_decode(row['x_out'], ast_merges)
         print(f"T(#{target_ast_text.count('(') - target_ast_text.count(')')}): {target_ast_text}")
         equal = predicted_ast_text == target_ast_text
         tree_scores.append(int(equal))

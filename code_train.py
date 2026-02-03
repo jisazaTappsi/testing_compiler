@@ -217,7 +217,7 @@ class CrossAttentionTransformer(nn.Module):
 
 
 def train():
-    dataset, out_merges, in_merges = data.get_code_data()
+    dataset, lex_merges, ast_merges = data.get_code_data()
     model = CrossAttentionTransformer()
     model = model.to(device)
 

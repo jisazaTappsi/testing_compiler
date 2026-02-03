@@ -147,12 +147,12 @@ def add_pad_tokens_and_trim(ids, block_size):
     return ids + [TOKEN_IDS[TT_PAD]] * max(0, block_size - len(ids) + 1)
 
 
-def get_code_pairs(rows, in_merges, out_merges, block_size):
+def get_code_pairs(rows, lex_merges, ast_merges, block_size):
     pairs = []
     for row in rows:
         lex_sent, ast_sent, result, has_error, idx = row.split(',')
-        lex_encoded = encode(lex_sent, in_merges)
-        ast_encoded = encode(ast_sent, out_merges)
+        lex_encoded = encode(lex_sent, lex_merges)
+        ast_encoded = encode(ast_sent, ast_merges)
         lex_encoded = add_pad_tokens_and_trim(lex_encoded, block_size)
         ast_encoded = add_pad_tokens_and_trim(ast_encoded, block_size)
 
@@ -173,8 +173,8 @@ def get_val_data(iterable):
 def get_code_data():
     """We translate from Lex to AST, ie our x_in=LEX, while x_out=AST"""
     rows = get_first_rows_fast(dataset_name, max_pairs)
-    in_merges, out_merges = get_merges()
-    pairs = get_code_pairs(rows, in_merges, out_merges, block_size)
+    lex_merges, ast_merges = get_merges()
+    pairs = get_code_pairs(rows, lex_merges, ast_merges, block_size)
 
     train_pairs = get_train_data(pairs)
     val_pairs = get_val_data(pairs)
@@ -182,7 +182,7 @@ def get_code_data():
     return {
         'train': train_pairs,
         'val': val_pairs
-    }, out_merges, in_merges
+    }, lex_merges, ast_merges
 
 
 if __name__ == '__main__':
