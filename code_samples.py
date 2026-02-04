@@ -15,14 +15,11 @@ elif torch.backends.mps.is_available():
     torch.mps.manual_seed(42)
 
 
-def get_sample_val_data(num=20):
+def get_sample_val_data(num):
     rows = get_first_rows_fast(dataset_name, max_pairs)
 
     # Choose samples of validation data
     val_rows = data.get_val_data(rows)
-
-    if introduce_error:
-        num *= 2
     random_val_ids = torch.randint(len(val_rows), (num,))
     random_val_rows = [val_rows[i] for i in random_val_ids]
 
@@ -38,7 +35,7 @@ def sample_decode(my_data, merges):
     return data.decode(my_data, merges)
 
 
-def run(num_samples=250):
+def run(num_samples):
     # Load data and merges
     val_samples = get_sample_val_data(num=num_samples)
     lex_merges, ast_merges = data.get_merges()
@@ -106,4 +103,4 @@ def run(num_samples=250):
 
 
 if __name__ == '__main__':
-    run(num_samples=250)
+    run(num_samples=500)
