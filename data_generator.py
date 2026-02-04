@@ -1,4 +1,5 @@
 import csv
+import math
 import random
 
 import basic
@@ -6,19 +7,37 @@ import tokens
 from util import *
 
 num_samples = 1_000_000
-#chars_choices = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()[]{}|;:.<>?'
+
+
+def log_scale_int(low: int, high: int, base: float = math.e) -> int:
+    """Sample an integer in [low, high] with log scale so smaller numbers are overrepresented.
+    low must be >= 1 (use separate logic to include 0)."""
+    if low >= high:
+        return low
+    # u uniform in [0,1] -> value log-uniform in [low, high], then round
+    u = random.random()
+    log_val = math.log(low, base) + u * (math.log(high, base) - math.log(low, base))
+    return min(high, max(low, int(round(math.exp(log_val)))))
+
+
+def int_part():
+    # TODO: tests proposed
+    #return 0 if random.random() < 0.0 else log_scale_int(1, 2**31, base=10)
+
+    return 0 if random.random() < 0.0 else log_scale_int(1, 9999)
 
 
 def generate_number():
-    """Generate a random integer or float."""
+    """Generate a random integer or float (log scale: smaller numbers more likely)."""
+    # Include 0 with small probability; otherwise log-scale in [1, 9999]
+    
+
     if random.random() < 0.3:  # 30% chance of float
-        # Generate float
-        integer_part = random.randint(0, 9999)
-        decimal_part = random.randint(0, 99)
+        integer_part = int_part()
+        decimal_part = random.randint(0, 99)  # 2 digits id drawn from uniform distribution
         return f"{integer_part}.{decimal_part:02d}"
     else:
-        # Generate integer
-        return str(random.randint(0, 9999))
+        return str(int_part())
 
 
 def generate_factor(depth=0, max_depth=5):
@@ -187,9 +206,9 @@ def generate():
                 continue
 
             interpreter = basic.Interpreter()
-            res = interpreter.visit(ast.node)
+            res = interpreter.visit(ast.node, basic.Context('<program>'))
             if res.error:
-                print('Interpretation is invalid!')
+                print(f'Interpretation is invalid!: {res.error.as_string()}')
                 invalid_count += 1
                 continue
 

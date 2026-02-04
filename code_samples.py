@@ -2,6 +2,7 @@ import statistics
 
 import data
 import basic
+import tokens
 from tokens import *
 from util import *
 from basic import Parser
@@ -31,13 +32,37 @@ def get_sample_val_data(num):
         return pairs
 
 
+def get_hand_made_data():
+    rows = []
+    #hand_samples = ['2456+2235', '3544*4567+6567/7889', '6899/7667', '1899*2908', '195.14 - 3257', '7758 * 7000 + 6 ']
+    hand_samples = ['2+2', '3*4+6/7', '6/7', '1*2', '1.1 - 3', '7 * 7 + 6 ']
+
+    for idx, hand_sample in enumerate(hand_samples):
+        lexer = basic.Lexer('<stdin>', hand_sample)
+        token_list, _ = lexer.make_tokens()
+        lexer_text = ' '.join(t.__repr__() for t in token_list)
+
+        ast = basic.Parser(token_list).parse()
+
+        interpreter = basic.Interpreter()
+        res = interpreter.visit(ast.node, '<program>')
+
+        rows.append(','.join([lexer_text, f'{tokens.TT_SOF} {ast.node} {tokens.TT_EOF}', str(res.value), 'False', str(idx)]))
+
+    lex_merges, ast_merges = data.get_merges()
+    pairs = data.get_code_pairs(rows, lex_merges, ast_merges, block_size)
+    return pairs
+
+
 def sample_decode(my_data, merges):
     return data.decode(my_data, merges)
 
 
 def run(num_samples):
+
     # Load data and merges
     val_samples = get_sample_val_data(num=num_samples)
+    #val_samples = get_hand_made_data()
     lex_merges, ast_merges = data.get_merges()
 
     model = CrossAttentionTransformer()

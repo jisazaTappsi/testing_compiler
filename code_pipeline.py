@@ -4,7 +4,7 @@ import code_train
 import code_samples
 import data_generator
 
-#data_generator.generate()
+data_generator.generate()
 data.save_code_merges()
 start = time.time()
 last_val_loss = code_train.train()
