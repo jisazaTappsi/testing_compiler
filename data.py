@@ -127,8 +127,8 @@ def load_code_tokens():
 
 
 def save_code_merges():
-    # When recalculating merges needs to delete the model first, as it will lose the encoding :(
     try:
+        # When recalculating merges needs to delete the model first, as it will lose the encoding :(
         os.remove(code_model_name)
     except FileNotFoundError:
         pass
