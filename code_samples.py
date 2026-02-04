@@ -51,6 +51,7 @@ def run(num_samples):
     for row in val_samples:
         context = torch.tensor([[TOKEN_IDS[TT_SOF]]], dtype=torch.long, device=device)
         data_in = row['x_in']
+        data_out = row['x_out']
         has_error = row['has_error']
         print(f'I: {sample_decode(data_in, lex_merges)}')
         predicted_ast_text = data.decode(
@@ -60,14 +61,14 @@ def run(num_samples):
             ast_merges
         )
         print(f'P(#{predicted_ast_text.count('(') - predicted_ast_text.count(')')}): {predicted_ast_text}')
-        target_ast_text = sample_decode(row['x_out'], ast_merges)
+        target_ast_text = sample_decode(data_out, ast_merges)
         print(f"T(#{target_ast_text.count('(') - target_ast_text.count(')')}): {target_ast_text}")
         equal = predicted_ast_text == target_ast_text
         tree_scores.append(int(equal))
 
         try:
             predicted_ast = Parser.get_tree_from_string(predicted_ast_text)
-            predicted_res = basic.Interpreter().visit(predicted_ast)
+            predicted_res = basic.Interpreter().visit(predicted_ast, '<program>')
             if predicted_res.error:
                 print(f'predicted_ast interpretation error: {predicted_res.error}\n')
                 computation_scores.append(0)
@@ -79,7 +80,7 @@ def run(num_samples):
 
         try:
             target_ast = Parser.get_tree_from_string(target_ast_text)
-            target_res = basic.Interpreter().visit(target_ast)
+            target_res = basic.Interpreter().visit(target_ast, '<program>')
         except Exception as e:
             # If the algorithm is cutting the data, then the algorithm is at fault... :(
             print(f'building/executing target AST gets: {e}, continuing...\n')

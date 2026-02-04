@@ -209,9 +209,9 @@ class CrossAttentionTransformer(nn.Module):
                 logits = logits[:, -1, :]  # last element in T dim (B, C)
                 probs = F.softmax(logits, dim=-1)
                 x_next = torch.multinomial(probs, num_samples=1)  # (B, 1)
+                x_out = torch.cat((x_out, x_next), dim=1)  # (B, T+1)
                 if x_next.item() == TOKEN_IDS[TT_EOF]:
                     break
-                x_out = torch.cat((x_out, x_next), dim=1)  # (B, T+1)
         self.train()
         return x_out
 
