@@ -34,8 +34,8 @@ def get_sample_val_data(num):
 
 def get_hand_made_data():
     rows = []
-    #hand_samples = ['2456+2235', '3544*4567+6567/7889', '6899/7667', '1899*2908', '195.14 - 3257', '7758 * 7000 + 6 ']
-    hand_samples = ['2+2', '3*4+6/7', '6/7', '1*2', '1.1 - 3', '7 * 7 + 6 ']
+    hand_samples = ['2456+2235', '3544*4567+6567/7889', '6899/7667', '1899*2908', '1959.14 - 3257', '7758 * 7000 + 6000 ']
+    hand_samples += ['2+2', '3*4+6/7', '6/7', '1*2', '1.1 - 3', '7 * 7 + 6 ']
 
     for idx, hand_sample in enumerate(hand_samples):
         lexer = basic.Lexer('<stdin>', hand_sample)
@@ -61,8 +61,8 @@ def sample_decode(my_data, merges):
 def run(num_samples):
 
     # Load data and merges
-    val_samples = get_sample_val_data(num=num_samples)
-    #val_samples = get_hand_made_data()
+    #val_samples = get_sample_val_data(num=num_samples)
+    val_samples = get_hand_made_data()
     lex_merges, ast_merges = data.get_merges()
 
     model = CrossAttentionTransformer()
