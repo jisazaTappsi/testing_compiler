@@ -80,8 +80,14 @@ def run(num_samples=250):
             computation_scores.append(0)
             continue
 
-        target_ast = Parser.get_tree_from_string(target_ast_text)
-        target_res = basic.Interpreter().visit(target_ast)
+        try:
+            target_ast = Parser.get_tree_from_string(target_ast_text)
+            target_res = basic.Interpreter().visit(target_ast)
+        except Exception as e:
+            # If the algorithm is cutting the data, then the algorithm is at fault... :(
+            print(f'building/executing target AST gets: {e}, continuing...\n')
+            computation_scores.append(0)
+            continue
 
         try:
             is_close = torch.allclose(torch.tensor(float(predicted_res.value.value)),

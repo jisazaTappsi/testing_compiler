@@ -4,8 +4,8 @@ import json
 from tokens import *
 from util import *
 
-lex_vocab_size = 500  # Source (English) vocabulary size - same as out so end tokens match
-ast_vocab_size = 500  # Target (Spanish) vocabulary size
+lex_vocab_size = 300  # Source (Lexer) vocabulary size
+ast_vocab_size = 300  # Target (AST) vocabulary size
 max_merge_pairs = 10_000
 
 
