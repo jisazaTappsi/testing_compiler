@@ -210,10 +210,29 @@ class CrossAttentionTransformer(nn.Module):
                 probs = F.softmax(logits, dim=-1)
                 x_next = torch.multinomial(probs, num_samples=1)  # (B, 1)
                 x_out = torch.cat((x_out, x_next), dim=1)  # (B, T+1)
-                if x_next.item() == TOKEN_IDS[TT_EOF]:
+                if x_next.item() == TOKEN_IDS[EOF]:
                     break
         self.train()
         return x_out
+
+    @staticmethod
+    def fix_unmatched_parenthesis(text):
+        count_lparen = text.count('(')
+        count_rparen = text.count(')')
+        if count_lparen > count_rparen:  # balance on right
+            text = text.strip() + ')' * (count_lparen - count_rparen)
+        elif count_lparen < count_rparen:  # balance on left
+            text = (count_rparen - count_lparen) * '(' + text.strip()
+
+        return text.strip()
+
+    def inference(self, x_in: list, ast_merges: dict):
+        with torch.no_grad():
+            generated = self.generate(x_out=torch.tensor([[TOKEN_IDS[SOF]]], dtype=torch.long, device=device),
+                                      x_in=torch.tensor([x_in], dtype=torch.long, device=device),
+                                      max_new_tokens=block_size)[0].tolist()
+            predicted_ast_text = data.decode(generated, ast_merges)
+            return CrossAttentionTransformer.fix_unmatched_parenthesis(predicted_ast_text)
 
 
 def train():

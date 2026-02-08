@@ -17,7 +17,7 @@ elif torch.backends.mps.is_available():
 
 
 def get_sample_val_data(num):
-    rows = get_first_rows_fast(dataset_name, max_pairs)
+    rows = get_first_rows_fast(dataset_name, max_samples)
 
     # Choose samples of validation data
     val_rows = data.get_val_data(rows)
@@ -25,11 +25,7 @@ def get_sample_val_data(num):
     random_val_rows = [val_rows[i] for i in random_val_ids]
 
     lex_merges, ast_merges = data.get_merges()
-    pairs = data.get_code_pairs(random_val_rows, lex_merges, ast_merges, block_size)
-    if introduce_error:
-        return [e for e in pairs if e['has_error']]
-    else:
-        return pairs
+    return data.get_code_dicts(random_val_rows, lex_merges, ast_merges, block_size)
 
 
 def get_hand_made_data():
@@ -47,22 +43,21 @@ def get_hand_made_data():
         interpreter = basic.Interpreter()
         res = interpreter.visit(ast.node, '<program>')
 
-        rows.append(','.join([lexer_text, f'{tokens.TT_SOF} {ast.node} {tokens.TT_EOF}', str(res.value), 'False', str(idx)]))
+        rows.append(','.join([lexer_text, f'{tokens.SOF} {ast.node} {tokens.EOF}', str(res.value), 'False', str(idx)]))
 
     lex_merges, ast_merges = data.get_merges()
-    pairs = data.get_code_pairs(rows, lex_merges, ast_merges, block_size)
-    return pairs
+    return data.get_code_dicts(rows, lex_merges, ast_merges, block_size)
 
 
 def sample_decode(my_data, merges):
-    return data.decode(my_data, merges)
+    return CrossAttentionTransformer.fix_unmatched_parenthesis(data.decode(my_data, merges))
 
 
 def run(num_samples):
 
     # Load data and merges
-    #val_samples = get_sample_val_data(num=num_samples)
-    val_samples = get_hand_made_data()
+    val_samples = get_sample_val_data(num=num_samples)
+    val_samples += get_hand_made_data()
     lex_merges, ast_merges = data.get_merges()
 
     model = CrossAttentionTransformer()
@@ -74,19 +69,15 @@ def run(num_samples):
     tree_scores = []
     computation_scores = []
     for row in val_samples:
-        context = torch.tensor([[TOKEN_IDS[TT_SOF]]], dtype=torch.long, device=device)
+        #context = torch.tensor([[TOKEN_IDS[SOF]]], dtype=torch.long, device=device)
         data_in = row['x_in']
         data_out = row['x_out']
         has_error = row['has_error']
         print(f'I: {sample_decode(data_in, lex_merges)}')
-        predicted_ast_text = data.decode(
-            model.generate(x_out=context,
-                           x_in=torch.tensor([data_in], dtype=torch.long, device=device),
-                           max_new_tokens=block_size)[0].tolist(),
-            ast_merges
-        )
+        predicted_ast_text = model.inference(data_in, ast_merges)
         print(f'P(#{predicted_ast_text.count('(') - predicted_ast_text.count(')')}): {predicted_ast_text}')
         target_ast_text = sample_decode(data_out, ast_merges)
+
         print(f"T(#{target_ast_text.count('(') - target_ast_text.count(')')}): {target_ast_text}")
         equal = predicted_ast_text == target_ast_text
         tree_scores.append(int(equal))
@@ -129,4 +120,4 @@ def run(num_samples):
 
 
 if __name__ == '__main__':
-    run(num_samples=500)
+    run(num_samples=250)

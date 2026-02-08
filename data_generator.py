@@ -139,7 +139,7 @@ def introduce_random_error(text):
         # Substitute a random character
         idx = random.randint(0, len(text_list) - 1)
         # Replace with a random printable character
-        text_list[idx] = random.choice(basic.ABC)
+        text_list[idx] = random.choice(basic.LETTERS)
     elif error_type == 'delete':
         # Delete a random character
         idx = random.randint(0, len(text_list) - 1)
@@ -147,7 +147,7 @@ def introduce_random_error(text):
     elif error_type == 'insert':
         # Insert a random character at a random position
         idx = random.randint(0, len(text_list))
-        text_list.insert(idx, random.choice(basic.ABC))
+        text_list.insert(idx, random.choice(basic.LETTERS))
     elif error_type == 'swap' and len(text_list) > 1:
         # Swap two adjacent characters
         idx = random.randint(0, len(text_list) - 2)
@@ -213,7 +213,7 @@ def generate():
                 continue
 
             valid_count += 1
-            dataset.append((lexer_text_error, f'{tokens.TT_SOF} {ast.node} {tokens.TT_EOF}', res.value, has_error, idx))
+            dataset.append((lexer_text_error, f'{tokens.SOF} {ast.node} {tokens.EOF}', res.value, has_error, idx))
         except Exception as e:
             invalid_count += 1
             continue

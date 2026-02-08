@@ -1,5 +1,5 @@
 import basic
-from basic import TT_EOF
+from basic import EOF
 
 
 def test_lexing_float_plus_int():
@@ -11,12 +11,12 @@ def test_lexing_float_plus_int():
 
     # Should produce 3 tokens: FLOAT, PLUS, INT, EOF
     assert len(tokens) == 4
-    assert tokens[0].type == basic.TT_FLOAT
+    assert tokens[0].type == basic.FLOAT
     assert tokens[0].value == 3.4
-    assert tokens[1].type == basic.TT_PLUS
-    assert tokens[2].type == basic.TT_INT
+    assert tokens[1].type == basic.PLUS
+    assert tokens[2].type == basic.INT
     assert tokens[2].value == 2
-    assert tokens[3].type == TT_EOF
+    assert tokens[3].type == EOF
 
 
 def test_lexing_float_multiply_float():
@@ -28,12 +28,12 @@ def test_lexing_float_multiply_float():
 
     # Should produce 3 tokens: FLOAT, MUL, FLOAT, EOF
     assert len(tokens) == 4
-    assert tokens[0].type == basic.TT_FLOAT
+    assert tokens[0].type == basic.FLOAT
     assert tokens[0].value == 2.5
-    assert tokens[1].type == basic.TT_MUL
-    assert tokens[2].type == basic.TT_FLOAT
+    assert tokens[1].type == basic.MUL
+    assert tokens[2].type == basic.FLOAT
     assert tokens[2].value == 2.5
-    assert tokens[3].type == TT_EOF
+    assert tokens[3].type == EOF
 
 
 def test_lexing_int_plus_int():
@@ -45,12 +45,12 @@ def test_lexing_int_plus_int():
 
     # Should produce 3 tokens: INT, PLUS, INT, EOF
     assert len(tokens) == 4
-    assert tokens[0].type == basic.TT_INT
+    assert tokens[0].type == basic.INT
     assert tokens[0].value == 1
-    assert tokens[1].type == basic.TT_PLUS
-    assert tokens[2].type == basic.TT_INT
+    assert tokens[1].type == basic.PLUS
+    assert tokens[2].type == basic.INT
     assert tokens[2].value == 2
-    assert tokens[3].type == TT_EOF
+    assert tokens[3].type == EOF
 
 
 def test_lexing_illegal_char():
@@ -91,41 +91,41 @@ def test_parsing_comprehensive_valid_ast():
     
     # Verify it's a BinOpNode (subtraction at the top level due to left associativity)
     assert isinstance(ast, basic.BinOpNode)
-    assert ast.op_tok.type == basic.TT_MINUS
+    assert ast.op_tok.type == basic.MINUS
     
     # Left side should be addition: 10 + (2.5 * 3)
     assert isinstance(ast.left_node, basic.BinOpNode)
-    assert ast.left_node.op_tok.type == basic.TT_PLUS
+    assert ast.left_node.op_tok.type == basic.PLUS
     
     # Right side should be division: 4.2 / 2
     assert isinstance(ast.right_node, basic.BinOpNode)
-    assert ast.right_node.op_tok.type == basic.TT_DIV
+    assert ast.right_node.op_tok.type == basic.DIV
     
     # Verify addition's left side: 10 (int)
     assert isinstance(ast.left_node.left_node, basic.NumberNode)
-    assert ast.left_node.left_node.tok.type == basic.TT_INT
+    assert ast.left_node.left_node.tok.type == basic.INT
     assert ast.left_node.left_node.tok.value == 10
     
     # Verify addition's right side is multiplication: 2.5 * 3
     assert isinstance(ast.left_node.right_node, basic.BinOpNode)
-    assert ast.left_node.right_node.op_tok.type == basic.TT_MUL
+    assert ast.left_node.right_node.op_tok.type == basic.MUL
     
     # Verify multiplication operands: 2.5 (float) * 3 (int)
     assert isinstance(ast.left_node.right_node.left_node, basic.NumberNode)
-    assert ast.left_node.right_node.left_node.tok.type == basic.TT_FLOAT
+    assert ast.left_node.right_node.left_node.tok.type == basic.FLOAT
     assert ast.left_node.right_node.left_node.tok.value == 2.5
     
     assert isinstance(ast.left_node.right_node.right_node, basic.NumberNode)
-    assert ast.left_node.right_node.right_node.tok.type == basic.TT_INT
+    assert ast.left_node.right_node.right_node.tok.type == basic.INT
     assert ast.left_node.right_node.right_node.tok.value == 3
     
     # Verify division operands: 4.2 (float) / 2 (int)
     assert isinstance(ast.right_node.left_node, basic.NumberNode)
-    assert ast.right_node.left_node.tok.type == basic.TT_FLOAT
+    assert ast.right_node.left_node.tok.type == basic.FLOAT
     assert ast.right_node.left_node.tok.value == 4.2
     
     assert isinstance(ast.right_node.right_node, basic.NumberNode)
-    assert ast.right_node.right_node.tok.type == basic.TT_INT
+    assert ast.right_node.right_node.tok.type == basic.INT
     assert ast.right_node.right_node.tok.value == 2
 
 
@@ -138,11 +138,11 @@ def test_parsing_unary_minus():
     
     # Verify it's a UnaryOpNode
     assert isinstance(ast, basic.UnaryOpNode)
-    assert ast.op_tok.type == basic.TT_MINUS
+    assert ast.op_tok.type == basic.MINUS
     
     # Verify the node inside is a NumberNode with value 5
     assert isinstance(ast.node, basic.NumberNode)
-    assert ast.node.tok.type == basic.TT_INT
+    assert ast.node.tok.type == basic.INT
     assert ast.node.tok.value == 5
 
 
@@ -155,11 +155,11 @@ def test_parsing_unary_plus():
     
     # Verify it's a UnaryOpNode
     assert isinstance(ast, basic.UnaryOpNode)
-    assert ast.op_tok.type == basic.TT_PLUS
+    assert ast.op_tok.type == basic.PLUS
     
     # Verify the node inside is a NumberNode with value 3.5
     assert isinstance(ast.node, basic.NumberNode)
-    assert ast.node.tok.type == basic.TT_FLOAT
+    assert ast.node.tok.type == basic.FLOAT
     assert ast.node.tok.value == 3.5
 
 
@@ -172,11 +172,11 @@ def test_parsing_parentheses():
     
     # Verify it's a BinOpNode (multiplication at top level)
     assert isinstance(ast, basic.BinOpNode)
-    assert ast.op_tok.type == basic.TT_MUL
+    assert ast.op_tok.type == basic.MUL
     
     # Left side should be addition: (1 + 2)
     assert isinstance(ast.left_node, basic.BinOpNode)
-    assert ast.left_node.op_tok.type == basic.TT_PLUS
+    assert ast.left_node.op_tok.type == basic.PLUS
     
     # Verify addition operands: 1 + 2
     assert isinstance(ast.left_node.left_node, basic.NumberNode)
@@ -198,11 +198,11 @@ def test_parsing_unary_with_parentheses():
     
     # Verify it's a UnaryOpNode
     assert isinstance(ast, basic.UnaryOpNode)
-    assert ast.op_tok.type == basic.TT_MINUS
+    assert ast.op_tok.type == basic.MINUS
     
     # The node inside should be a BinOpNode (addition)
     assert isinstance(ast.node, basic.BinOpNode)
-    assert ast.node.op_tok.type == basic.TT_PLUS
+    assert ast.node.op_tok.type == basic.PLUS
     
     # Verify addition operands: 1 + 2
     assert isinstance(ast.node.left_node, basic.NumberNode)

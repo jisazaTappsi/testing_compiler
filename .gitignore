@@ -214,4 +214,4 @@ __marimo__/
 
 dataset*
 merges_*.json
-model*
+*.pth

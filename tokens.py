@@ -1,29 +1,39 @@
-TT_INT = 'TT_INT'
-TT_FLOAT = 'TT_FLOAT'
-TT_PLUS = 'TT_PLUS'
-TT_MINUS = 'TT_MINUS'
-TT_MUL = 'TT_MUL'
-TT_DIV = 'TT_DIV'
-TT_LPAREN = 'TT_LPAREN'
-TT_RPAREN = 'TT_RPAREN'
-TT_EOF = 'EOF'  # End of file
-TT_SOF = 'SOF'  # Start of file
-TT_PAD = 'PAD'  # After EOF
-TT_ABC = 'TT_ABC'
+INT = 'INT'
+FLOAT = 'FLOAT'
+IDENTIFIER = 'IDENTIFIER'
+KEYWORD = 'KEYWORD'
+PLUS = 'PLUS'
+MINUS = 'MINUS'
+MUL = 'MUL'
+DIV = 'DIV'
+POW = 'POW'
+LPAREN = 'LPAREN'
+RPAREN = 'RPAREN'
+EQ = 'EQ'
+EOF = 'EOF'  # End of file
+SOF = 'SOF'  # Start of file
+PAD = 'PAD'  # After EOF
 
 TOKENS = [
-    TT_INT,
-    TT_FLOAT,
-    TT_PLUS,
-    TT_MINUS,
-    TT_MUL,
-    TT_DIV,
-    TT_LPAREN,
-    TT_RPAREN,
-    TT_EOF,
-    TT_SOF,
-    TT_PAD,
-    TT_ABC
+    INT,
+    FLOAT,
+    IDENTIFIER,
+    KEYWORD,
+    PLUS,
+    MINUS,
+    MUL,
+    DIV,
+    POW,
+    LPAREN,
+    RPAREN,
+    EQ,
+    EOF,
+    SOF,
+    PAD,
+]
+
+KEYWORDS = [
+    'VAR'
 ]
 
 TOKEN_BASIC_IDS = {

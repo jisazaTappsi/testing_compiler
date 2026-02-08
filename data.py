@@ -6,7 +6,7 @@ from util import *
 
 lex_vocab_size = 300  # Source (Lexer) vocabulary size
 ast_vocab_size = 300  # Target (AST) vocabulary size
-max_merge_pairs = 10_000
+max_merge_samples = 10_000
 
 
 def get_max_pair(ids):
@@ -68,7 +68,7 @@ def train_merges(toks, input_type, target_vocab_size=280):
 
 def decode(ids, my_merges):
     vocab = get_vocab(my_merges)
-    toks = b''.join(vocab[i] for i in ids if i not in (TOKEN_IDS[TT_SOF], TOKEN_IDS[TT_EOF], TOKEN_IDS[TT_PAD]))
+    toks = b''.join(vocab[i] for i in ids if i not in (TOKEN_IDS[SOF], TOKEN_IDS[EOF], TOKEN_IDS[PAD]))
     return toks.decode('utf-8', errors='replace')
 
 def encode(string, my_merges):
@@ -112,8 +112,8 @@ def get_compressed_tokens(text):
 
 
 def load_code_tokens():
-    rows = get_first_rows_fast(dataset_name, max_pairs)
-    train_rows = get_train_data(rows)[:max_merge_pairs]
+    rows = get_first_rows_fast(dataset_name, max_samples)
+    train_rows = get_train_data(rows)[:max_merge_samples]
     lex_texts, ast_texts = zip(*[(row.split(',')[0], row.split(',')[1]) for row in train_rows])
 
     lex_text = ' '.join(lex_texts)
@@ -144,11 +144,11 @@ def add_pad_tokens_and_trim(ids, block_size):
 
     # Truncate/pad to block_size
     ids = ids[:block_size]
-    return ids + [TOKEN_IDS[TT_PAD]] * max(0, block_size - len(ids) + 1)
+    return ids + [TOKEN_IDS[PAD]] * max(0, block_size - len(ids) + 1)
 
 
-def get_code_pairs(rows, lex_merges, ast_merges, block_size):
-    pairs = []
+def get_code_dicts(rows, lex_merges, ast_merges, block_size):
+    dicts = []
     for row in rows:
         lex_sent, ast_sent, result, has_error, idx = row.split(',')
         lex_encoded = encode(lex_sent, lex_merges)
@@ -156,8 +156,8 @@ def get_code_pairs(rows, lex_merges, ast_merges, block_size):
         lex_encoded = add_pad_tokens_and_trim(lex_encoded, block_size)
         ast_encoded = add_pad_tokens_and_trim(ast_encoded, block_size)
 
-        pairs.append({'x_in': lex_encoded, 'x_out': ast_encoded, 'has_error': has_error == 'True', 'id': idx})
-    return pairs
+        dicts.append({'x_in': lex_encoded, 'x_out': ast_encoded, 'has_error': has_error == 'True', 'id': idx})
+    return dicts
 
 
 def get_train_data(iterable):
@@ -172,16 +172,16 @@ def get_val_data(iterable):
 
 def get_code_data():
     """We translate from Lex to AST, ie our x_in=LEX, while x_out=AST"""
-    rows = get_first_rows_fast(dataset_name, max_pairs)
+    rows = get_first_rows_fast(dataset_name, max_samples)
     lex_merges, ast_merges = get_merges()
-    pairs = get_code_pairs(rows, lex_merges, ast_merges, block_size)
+    dicts = get_code_dicts(rows, lex_merges, ast_merges, block_size)
 
-    train_pairs = get_train_data(pairs)
-    val_pairs = get_val_data(pairs)
-    print(f'Training pairs: {len(train_pairs)}, Validation pairs: {len(val_pairs)}')
+    train_dicts = get_train_data(dicts)
+    val_dicts = get_val_data(dicts)
+    print(f'Training samples: {len(train_dicts)}, Validation samples: {len(val_dicts)}')
     return {
-        'train': train_pairs,
-        'val': val_pairs
+        'train': train_dicts,
+        'val': val_dicts
     }, lex_merges, ast_merges
 
 

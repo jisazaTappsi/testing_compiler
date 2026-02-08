@@ -12,8 +12,8 @@ dropout = 0.2
 n_head = 3  # 4
 n_embed = 64 * n_head  # 32
 train_split_ratio = 0.8
-max_pairs = 100_000
-introduce_error = True
+max_samples = 100_000
+introduce_error = False
 
 if introduce_error:
     code_model_name = 'model_error.pth'
@@ -31,7 +31,7 @@ else:
     device = 'cpu'
 
 
-def get_first_rows_fast(filename, max_pairs):
+def get_first_rows_fast(filename, my_max_samples):
     with open(filename, 'r', encoding='utf-8') as f:
-        first_lines = list(islice(f, max_pairs))
+        first_lines = list(islice(f, my_max_samples))
     return [line.strip() for line in first_lines]
