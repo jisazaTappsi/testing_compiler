@@ -1,7 +1,7 @@
-import csv
 import math
 import random
 
+import data
 import basic
 import tokens
 from util import *
@@ -117,7 +117,7 @@ def generate_valid_expression():
     while len(expr) > max_length:
         max_depth = max(1, max_depth - 1)
         expr = generate_expr(depth=0, max_depth=max_depth)
-    
+
     return expr
 
 
@@ -212,8 +212,18 @@ def generate():
                 invalid_count += 1
                 continue
 
-            valid_count += 1
-            dataset.append((lexer_text_error, f'{tokens.SOF} {ast.node} {tokens.EOF}', res.value, has_error, text, idx))
+            ast_text = f'{tokens.SOF} {ast.node} {tokens.EOF}'
+            lex_encoded = data.encode(lexer_text_error, {})
+            ast_encoded = data.encode(ast_text, {})
+            if len(lex_encoded) <= block_size and len(ast_encoded) <= block_size:
+                valid_count += 1
+                lex_encoded = data.add_pad_tokens_and_trim(lex_encoded, block_size)
+                ast_encoded = data.add_pad_tokens_and_trim(ast_encoded, block_size)
+                dataset.append((lexer_text_error, ast_text, res.value, has_error, text,
+                                ' '.join([str(i) for i in lex_encoded]), ' '.join([str(i) for i in ast_encoded]), idx))
+            else:
+                invalid_count += 1
+
         except Exception as e:
             invalid_count += 1
             continue

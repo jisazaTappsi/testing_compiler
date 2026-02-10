@@ -4,8 +4,8 @@ import json
 from tokens import *
 from util import *
 
-lex_vocab_size = 300  # Source (Lexer) vocabulary size
-ast_vocab_size = 300  # Target (AST) vocabulary size
+lex_vocab_size = 255 + len(TOKENS)  # Source (Lexer) vocabulary size
+ast_vocab_size = 255 + len(TOKENS)  # Target (AST) vocabulary size
 max_merge_samples = 10_000
 
 
@@ -44,11 +44,17 @@ def get_merge_filename(input_type):
     return f'merges_{input_type}.json'
 
 
+def save_merge_to_file(input_type, my_merges):
+    # Convert tuple keys to strings for JSON
+    with open(get_merge_filename(input_type), 'w') as outfile:
+        json.dump({f'{k[0]},{k[1]}': v for k, v in my_merges.items()}, outfile)
+
+
 def train_merges(toks, input_type, target_vocab_size=280):
     ids = toks.copy()
     idx = 256 + len(TOKEN_BYTES)
     my_merges = {}  # pair => idx
-    for i in range(target_vocab_size - idx - 2):  # Saves 2 tokens for START and END
+    for i in range(target_vocab_size - idx + 1):
         pair, pair_count = get_max_pair(ids)
         decoded_pair = decode(pair, my_merges)
         print(f'Merging "{decode([pair[0]], my_merges)}", "{decode([pair[1]], my_merges)}" into: "{decoded_pair}"')
@@ -60,10 +66,7 @@ def train_merges(toks, input_type, target_vocab_size=280):
     print(f'ids len: {len(ids)}')
     print(f'compression: {round(len(toks) / len(ids), 2)}')
 
-    # Convert tuple keys to strings for JSON
-    with open(get_merge_filename(input_type), 'w') as outfile:
-        json.dump({f'{k[0]},{k[1]}': v for k, v in my_merges.items()}, outfile)
-
+    save_merge_to_file(input_type, my_merges)
     return my_merges
 
 def decode(ids, my_merges):
@@ -134,28 +137,28 @@ def save_code_merges():
         pass
 
     lex_tokens, ast_tokens = load_code_tokens()
-    lex_merges = train_merges(lex_tokens + ast_tokens, 'lex', target_vocab_size=ast_vocab_size)
-    ast_merges = train_merges(ast_tokens + lex_tokens, 'ast', target_vocab_size=lex_vocab_size)
+    lex_merges = train_merges(lex_tokens, 'lex', target_vocab_size=ast_vocab_size)
+    ast_merges = train_merges(ast_tokens, 'ast', target_vocab_size=lex_vocab_size)
     return lex_merges, ast_merges
+
+
+def save_code_merges_dummy():
+    save_merge_to_file('lex', {})
+    save_merge_to_file('ast', {})
 
 
 def add_pad_tokens_and_trim(ids, block_size):
     """the +1 more token to divide it between x and y upstream on the get_batch method."""
-
-    # Truncate/pad to block_size
-    ids = ids[:block_size]
+    ids = ids[:block_size]  # Truncate/pad to block_size
     return ids + [TOKEN_IDS[PAD]] * max(0, block_size - len(ids) + 1)
 
 
-def get_code_dicts(rows, lex_merges, ast_merges, block_size):
+def get_code_dicts(rows):
     dicts = []
     for row in rows:
-        lex_sent, ast_sent, result, has_error, text, idx = row
-        lex_encoded = encode(lex_sent, lex_merges)
-        ast_encoded = encode(ast_sent, ast_merges)
-        lex_encoded = add_pad_tokens_and_trim(lex_encoded, block_size)
-        ast_encoded = add_pad_tokens_and_trim(ast_encoded, block_size)
-
+        lex_sent, ast_sent, result, has_error, text, lex_encoded, ast_encoded, idx = row
+        lex_encoded = [int(s) for s in lex_encoded.split()]
+        ast_encoded = [int(s) for s in ast_encoded.split()]
         dicts.append({'x_in': lex_encoded, 'x_out': ast_encoded, 'has_error': has_error == 'True', 'text': text,
                       'id': idx})
     return dicts
@@ -175,7 +178,7 @@ def get_code_data():
     """We translate from Lex to AST, ie our x_in=LEX, while x_out=AST"""
     rows = get_first_rows_fast(dataset_name, max_samples)
     lex_merges, ast_merges = get_merges()
-    dicts = get_code_dicts(rows, lex_merges, ast_merges, block_size)
+    dicts = get_code_dicts(rows)
 
     train_dicts = get_train_data(dicts)
     val_dicts = get_val_data(dicts)

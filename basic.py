@@ -1,7 +1,7 @@
 ########################
 # IMPORTS
 ########################
-
+import re
 import data
 import torch
 import string
@@ -307,8 +307,7 @@ class Parser:
         - (MINUS INT:5) -> UnaryOpNode
         - INT:3 -> NumberNode
         """
-        import re
-        
+
         text = text.strip()
         
         # Helper function to parse a token string (e.g., "INT:2" or "MUL")

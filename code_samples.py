@@ -24,8 +24,7 @@ def get_sample_val_data(num):
     random_val_ids = torch.randint(len(val_rows), (num,))
     random_val_rows = [val_rows[i] for i in random_val_ids]
 
-    lex_merges, ast_merges = data.get_merges()
-    return data.get_code_dicts(random_val_rows, lex_merges, ast_merges, block_size)
+    return data.get_code_dicts(random_val_rows)
 
 
 def get_hand_made_data():
@@ -43,11 +42,16 @@ def get_hand_made_data():
         res = interpreter.visit(ast.node, '<program>')
 
         rows.append(
-            [lexer_text, f'{tokens.SOF} {ast.node} {tokens.EOF}', str(res.value), 'False', hand_sample, str(idx)]
+            [lexer_text,
+             f'{tokens.SOF} {ast.node} {tokens.EOF}',
+             str(res.value),
+             'False',
+             hand_sample, ' '.join(data.encode(lexer_text, {})),
+             ' '.join(data.encode(str(ast), {})),
+             str(idx)]
         )
 
-    lex_merges, ast_merges = data.get_merges()
-    return data.get_code_dicts(rows, lex_merges, ast_merges, block_size)
+    return data.get_code_dicts(rows)
 
 
 def sample_decode(my_data, merges):
@@ -73,7 +77,7 @@ def run(num_samples):
         data_in = row['x_in']
         data_out = row['x_out']
         has_error = row['has_error']
-        print(f'I: {sample_decode(data_in, lex_merges)}')
+        print(f'text: {row['text']}')
         predicted_ast_text = model.inference(data_in, ast_merges)
         print(f'P(#{predicted_ast_text.count('(') - predicted_ast_text.count(')')}): {predicted_ast_text}')
         target_ast_text = sample_decode(data_out, ast_merges)
