@@ -647,7 +647,7 @@ class Interpreter:
         var_name = node.var_name_tok.value
         value = context.symbol_table.get(var_name)
 
-        if not value:
+        if value is None:
             return res.failure(RTError(
                 pos_start=node.pos_start,
                 pos_end=node.pos_end,

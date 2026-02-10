@@ -213,7 +213,7 @@ def generate():
                 continue
 
             valid_count += 1
-            dataset.append((lexer_text_error, f'{tokens.SOF} {ast.node} {tokens.EOF}', res.value, has_error, idx))
+            dataset.append((lexer_text_error, f'{tokens.SOF} {ast.node} {tokens.EOF}', res.value, has_error, text, idx))
         except Exception as e:
             invalid_count += 1
             continue

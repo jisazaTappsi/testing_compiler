@@ -114,7 +114,7 @@ def get_compressed_tokens(text):
 def load_code_tokens():
     rows = get_first_rows_fast(dataset_name, max_samples)
     train_rows = get_train_data(rows)[:max_merge_samples]
-    lex_texts, ast_texts = zip(*[(row.split(',')[0], row.split(',')[1]) for row in train_rows])
+    lex_texts, ast_texts = zip(*[(row[0], row[1]) for row in train_rows])
 
     lex_text = ' '.join(lex_texts)
     ast_text = ' '.join(ast_texts)
@@ -150,13 +150,14 @@ def add_pad_tokens_and_trim(ids, block_size):
 def get_code_dicts(rows, lex_merges, ast_merges, block_size):
     dicts = []
     for row in rows:
-        lex_sent, ast_sent, result, has_error, idx = row.split(',')
+        lex_sent, ast_sent, result, has_error, text, idx = row
         lex_encoded = encode(lex_sent, lex_merges)
         ast_encoded = encode(ast_sent, ast_merges)
         lex_encoded = add_pad_tokens_and_trim(lex_encoded, block_size)
         ast_encoded = add_pad_tokens_and_trim(ast_encoded, block_size)
 
-        dicts.append({'x_in': lex_encoded, 'x_out': ast_encoded, 'has_error': has_error == 'True', 'id': idx})
+        dicts.append({'x_in': lex_encoded, 'x_out': ast_encoded, 'has_error': has_error == 'True', 'text': text,
+                      'id': idx})
     return dicts
 
 

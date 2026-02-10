@@ -1,3 +1,4 @@
+import csv
 from itertools import islice
 
 import torch
@@ -32,6 +33,6 @@ else:
 
 
 def get_first_rows_fast(filename, my_max_samples):
-    with open(filename, 'r', encoding='utf-8') as f:
-        first_lines = list(islice(f, my_max_samples))
-    return [line.strip() for line in first_lines]
+    with open(filename, 'r', encoding='utf-8', newline='') as f:
+        reader = csv.reader(f)
+        return list(islice(reader, my_max_samples))

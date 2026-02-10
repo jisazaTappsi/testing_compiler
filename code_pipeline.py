@@ -9,7 +9,7 @@ data.save_code_merges()
 start = time.time()
 last_val_loss = code_train.train()
 end = time.time()
-computation_percentage = code_samples.run(num_samples=500)
+computation_percentage = code_samples.run(num_samples=250)
 duration_minutes = (end - start) / 60
 print(f'It took: {round(duration_minutes, 1)} min')
 print(f'{last_val_loss=}')

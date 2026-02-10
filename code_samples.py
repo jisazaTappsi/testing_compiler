@@ -39,11 +39,12 @@ def get_hand_made_data():
         lexer_text = ' '.join(t.__repr__() for t in token_list)
 
         ast = basic.Parser(token_list).parse()
-
         interpreter = basic.Interpreter()
         res = interpreter.visit(ast.node, '<program>')
 
-        rows.append(','.join([lexer_text, f'{tokens.SOF} {ast.node} {tokens.EOF}', str(res.value), 'False', str(idx)]))
+        rows.append(
+            [lexer_text, f'{tokens.SOF} {ast.node} {tokens.EOF}', str(res.value), 'False', hand_sample, str(idx)]
+        )
 
     lex_merges, ast_merges = data.get_merges()
     return data.get_code_dicts(rows, lex_merges, ast_merges, block_size)
@@ -69,7 +70,6 @@ def run(num_samples):
     tree_scores = []
     computation_scores = []
     for row in val_samples:
-        #context = torch.tensor([[TOKEN_IDS[SOF]]], dtype=torch.long, device=device)
         data_in = row['x_in']
         data_out = row['x_out']
         has_error = row['has_error']
