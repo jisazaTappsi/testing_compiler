@@ -2,7 +2,7 @@ import torch
 
 batch_size = 64  # 32
 block_size = 64  # 256
-max_iters = 20_000
+max_iters = 15_000
 eval_interval = 500
 learning_rate = 9e-4  # 3e-4
 eval_iters = 200
