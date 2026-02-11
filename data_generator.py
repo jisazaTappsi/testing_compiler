@@ -1,6 +1,8 @@
 import math
 import random
 
+import pandas as pd
+
 import data
 import basic
 import tokens
@@ -160,7 +162,7 @@ def generate():
     """Generate valid arithmetic expressions."""
     valid_count = 0
     invalid_count = 0
-    dataset = []
+    rows = []
     lexer_texts = set()
 
     for idx in range(num_samples):
@@ -219,8 +221,18 @@ def generate():
                 valid_count += 1
                 lex_encoded = data.add_pad_tokens_and_trim(lex_encoded, block_size)
                 ast_encoded = data.add_pad_tokens_and_trim(ast_encoded, block_size)
-                dataset.append((lexer_text_error, ast_text, res.value, has_error, text,
-                                ' '.join([str(i) for i in lex_encoded]), ' '.join([str(i) for i in ast_encoded]), idx))
+                rows.append(
+                    {
+                        'lex_text': lexer_text_error,
+                        'ast_text': ast_text,
+                        'result': res.value,
+                        'has_error': has_error,
+                        'text': text,
+                        'x_in': lex_encoded,
+                        'x_out': ast_encoded,
+                        'id': idx,
+                    }
+                )
             else:
                 invalid_count += 1
 
@@ -228,10 +240,9 @@ def generate():
             invalid_count += 1
             continue
 
-    # Write dataset to CSV file once at the end
-    with open(dataset_name, 'w', newline='') as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerows(dataset)
+    # Save dataset as a Pandas DataFrame (pickled)
+    df = pd.DataFrame(rows)
+    df.to_pickle(dataset_name)
 
     print(f"\nValid: {valid_count}, Invalid: {invalid_count}, Success rate: {valid_count/num_samples*100:.1f}%")
 

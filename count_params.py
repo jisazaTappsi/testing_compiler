@@ -1,5 +1,6 @@
 import data
 import statistics
+import pandas as pd
 
 from util import *
 from code_train import CrossAttentionTransformer
@@ -21,11 +22,12 @@ model.eval()
 
 param_count = count_parameters(model)
 token_count = data_to_params_ratio * param_count
-rows = get_first_rows_fast(dataset_name, 10_000)
+df = pd.read_pickle(dataset_name)
+df = df.head(max_samples)
 
-lex_merges, _ = data.get_merges()
-lens0 = [len(data.encode(r[0], lex_merges)) for r in rows]
-lens1 = [len(data.encode(r[1], lex_merges)) for r in rows]
+lex_merges, ast_merges = data.get_merges()
+lens0 = [len(data.encode(row['lex_text'], lex_merges)) for _, row in df.iterrows()]
+lens1 = [len(data.encode(row['ast_text'], ast_merges)) for _, row in df.iterrows()]
 avg_tokens_per_sentence = statistics.mean(lens1)
 
 print(f'total params: {param_count}')

@@ -1,6 +1,8 @@
 import os
 import json
 
+import pandas as pd
+
 from tokens import *
 from util import *
 
@@ -115,12 +117,12 @@ def get_compressed_tokens(text):
 
 
 def load_code_tokens():
-    rows = get_first_rows_fast(dataset_name, max_samples)
-    train_rows = get_train_data(rows)[:max_merge_samples]
-    lex_texts, ast_texts = zip(*[(row[0], row[1]) for row in train_rows])
+    df = pd.read_pickle(dataset_name)
+    df = df.head(max_samples)
+    train_df = get_train_data(df).head(max_merge_samples)
 
-    lex_text = ' '.join(lex_texts)
-    ast_text = ' '.join(ast_texts)
+    lex_text = ' '.join(train_df['lex_text'].tolist())
+    ast_text = ' '.join(train_df['ast_text'].tolist())
 
     lex_tokens = get_compressed_tokens(lex_text)
     ast_tokens = get_compressed_tokens(ast_text)
@@ -153,15 +155,8 @@ def add_pad_tokens_and_trim(ids, block_size):
     return ids + [TOKEN_IDS[PAD]] * max(0, block_size - len(ids) + 1)
 
 
-def get_code_dicts(rows):
-    dicts = []
-    for row in rows:
-        lex_sent, ast_sent, result, has_error, text, lex_encoded, ast_encoded, idx = row
-        lex_encoded = [int(s) for s in lex_encoded.split()]
-        ast_encoded = [int(s) for s in ast_encoded.split()]
-        dicts.append({'x_in': lex_encoded, 'x_out': ast_encoded, 'has_error': has_error == 'True', 'text': text,
-                      'id': idx})
-    return dicts
+def get_code_dicts(df):
+    return df.to_dict(orient='records')
 
 
 def get_train_data(iterable):
@@ -176,9 +171,10 @@ def get_val_data(iterable):
 
 def get_code_data():
     """We translate from Lex to AST, ie our x_in=LEX, while x_out=AST"""
-    rows = get_first_rows_fast(dataset_name, max_samples)
+    df = pd.read_pickle(dataset_name)
+    df = df.head(max_samples)
     lex_merges, ast_merges = get_merges()
-    dicts = get_code_dicts(rows)
+    dicts = get_code_dicts(df)
 
     train_dicts = get_train_data(dicts)
     val_dicts = get_val_data(dicts)

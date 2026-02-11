@@ -1,5 +1,7 @@
 import statistics
 
+import pandas as pd
+
 import data
 import basic
 import tokens
@@ -17,14 +19,15 @@ elif torch.backends.mps.is_available():
 
 
 def get_sample_val_data(num):
-    rows = get_first_rows_fast(dataset_name, max_samples)
+    df = pd.read_pickle(dataset_name)
+    df = df.head(max_samples)
 
     # Choose samples of validation data
-    val_rows = data.get_val_data(rows)
-    random_val_ids = torch.randint(len(val_rows), (num,))
-    random_val_rows = [val_rows[i] for i in random_val_ids]
+    val_df = data.get_val_data(df)
+    random_val_ids = torch.randint(len(val_df), (num,))
+    random_val_df = val_df.iloc[random_val_ids]
 
-    return data.get_code_dicts(random_val_rows)
+    return data.get_code_dicts(random_val_df)
 
 
 def get_hand_made_data():
@@ -42,16 +45,20 @@ def get_hand_made_data():
         res = interpreter.visit(ast.node, '<program>')
 
         rows.append(
-            [lexer_text,
-             f'{tokens.SOF} {ast.node} {tokens.EOF}',
-             str(res.value),
-             'False',
-             hand_sample, ' '.join(data.encode(lexer_text, {})),
-             ' '.join(data.encode(str(ast), {})),
-             str(idx)]
+            {
+                'lex_text': lexer_text,
+                'ast_text': f'{tokens.SOF} {ast.node} {tokens.EOF}',
+                'result': res.value,
+                'has_error': False,
+                'text': hand_sample,
+                'x_in': data.add_pad_tokens_and_trim(data.encode(lexer_text, {}), block_size),
+                'x_out': data.add_pad_tokens_and_trim(data.encode(str(ast), {}), block_size),
+                'id': idx,
+            }
         )
 
-    return data.get_code_dicts(rows)
+    df = pd.DataFrame(rows)
+    return data.get_code_dicts(df)
 
 
 def sample_decode(my_data, merges):

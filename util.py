@@ -1,27 +1,24 @@
-import csv
-from itertools import islice
-
 import torch
 
-batch_size = 64 # 32
-block_size = 64 # 256
+batch_size = 64  # 32
+block_size = 64  # 256
 max_iters = 5_000
 eval_interval = 500
-learning_rate = 3e-4 # 1e-4
+learning_rate = 3e-4  # 1e-4
 eval_iters = 200
 dropout = 0.2
 n_head = 3  # 4
 n_embed = 64 * n_head  # 32
 train_split_ratio = 0.8
-max_samples = 100_000
+max_samples = 600_000
 introduce_error = False
 
 if introduce_error:
     code_model_name = 'model_error.pth'
-    dataset_name = 'dataset_error.csv'
+    dataset_name = 'dataset_error.pkl'
 else:
     code_model_name = 'code_model.pth'
-    dataset_name = 'dataset.csv'
+    dataset_name = 'dataset.pkl'
 
 
 if torch.cuda.is_available():
@@ -30,9 +27,3 @@ elif torch.backends.mps.is_available():
     device = 'mps'
 else:
     device = 'cpu'
-
-
-def get_first_rows_fast(filename, my_max_samples):
-    with open(filename, 'r', encoding='utf-8', newline='') as f:
-        reader = csv.reader(f)
-        return list(islice(reader, my_max_samples))

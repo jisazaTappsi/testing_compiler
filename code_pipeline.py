@@ -4,8 +4,8 @@ import code_train
 import code_samples
 import data_generator
 
-data.save_code_merges_dummy()  # no dependency on generate()
-data_generator.generate()
+#data.save_code_merges_dummy()  # no dependency on generate()
+#data_generator.generate()
 #data.save_code_merges()  # Depends on generate(), and should go below it!
 start = time.time()
 last_val_loss = code_train.train()
