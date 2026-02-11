@@ -52,7 +52,7 @@ def get_hand_made_data():
                 'has_error': False,
                 'text': hand_sample,
                 'x_in': data.add_pad_tokens_and_trim(data.encode(lexer_text, {}), block_size),
-                'x_out': data.add_pad_tokens_and_trim(data.encode(str(ast), {}), block_size),
+                'x_out': data.add_pad_tokens_and_trim(data.encode(f'{tokens.SOF} {ast.node} {tokens.EOF}', {}), block_size),
                 'id': idx,
             }
         )
@@ -124,9 +124,9 @@ def run(num_samples):
         computation_scores.append(int(is_close))
         print(f'{has_error=} | AST are equal: {equal} | predicted: {predicted_res.value} target: {target_res.value} | computation is equal: {is_close}\n')
 
-    print(f'Avg performance tree_scores: {round(statistics.mean(tree_scores)*100)}%')
+    print(f'Avg performance tree_scores: {round(statistics.mean(tree_scores)*100, 3)}%')
     computation_percentage = statistics.mean(computation_scores) * 100
-    print(f'Avg performance computation: {round(computation_percentage)}%')
+    print(f'Avg performance computation: {round(computation_percentage, 3)}%')
     return computation_percentage
 
 
