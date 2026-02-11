@@ -8,7 +8,7 @@ import basic
 import tokens
 from util import *
 
-num_samples = 1_000_000
+num_samples = 2_000_000
 
 
 def log_scale_int(low: int, high: int, base: float = math.e) -> int:
@@ -163,13 +163,17 @@ def generate():
     valid_count = 0
     invalid_count = 0
     rows = []
-    lexer_texts = set()
+    texts = set()
 
     for idx in range(num_samples):
         if idx % 1_000 == 0:
             print(f"loaded: {(idx/num_samples)*100:.2f}%")
         # Generate a valid expression
         text = generate_valid_expression()
+        if text in texts:
+            invalid_count += 1
+            continue
+        texts.add(text)
         text_error = text
 
         # Introduce random error with 50% probability
@@ -186,7 +190,6 @@ def generate():
                 print('Lexing is invalid!')
                 invalid_count += 1
                 continue
-            lexer_text = ' '.join(t.__repr__() for t in token_list)
 
             tokens_error, error = lexer_error.make_tokens()
             if error:
@@ -194,10 +197,6 @@ def generate():
                 invalid_count += 1
                 continue
             lexer_text_error = ' '.join(t.__repr__() for t in tokens_error)
-
-            if lexer_text in lexer_texts:
-                print('Lexer is duplicated, will continue...')
-                continue
 
             # Try to parse
             parser = basic.Parser(token_list)

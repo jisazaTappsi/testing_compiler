@@ -27,13 +27,14 @@ def get_sample_val_data(num):
     random_val_ids = torch.randint(len(val_df), (num,))
     random_val_df = val_df.iloc[random_val_ids]
 
-    return data.get_code_dicts(random_val_df)
+    return random_val_df
 
 
 def get_hand_made_data():
     rows = []
     hand_samples = ['2456+2235', '3544*4567+6567/7889', '6899/7667', '1899*2908', '1959.14 - 3257', '7758 * 7000 + 6000 ']
     hand_samples += ['2+2', '3*4+6/7', '6/7', '1*2', '1.1 - 3', '7 * 7 + 6 ']
+    #hand_samples = ['6.12++(+(412.41/2)/+(4*1420))']
 
     for idx, hand_sample in enumerate(hand_samples):
         lexer = basic.Lexer('<stdin>', hand_sample)
@@ -57,8 +58,7 @@ def get_hand_made_data():
             }
         )
 
-    df = pd.DataFrame(rows)
-    return data.get_code_dicts(df)
+    return pd.DataFrame(rows)
 
 
 def sample_decode(my_data, merges):
@@ -69,7 +69,7 @@ def run(num_samples):
 
     # Load data and merges
     val_samples = get_sample_val_data(num=num_samples)
-    val_samples += get_hand_made_data()
+    #val_samples = get_hand_made_data()
     lex_merges, ast_merges = data.get_merges()
 
     model = CrossAttentionTransformer()
@@ -80,14 +80,11 @@ def run(num_samples):
     # Run generation
     tree_scores = []
     computation_scores = []
-    for row in val_samples:
-        data_in = row['x_in']
-        data_out = row['x_out']
-        has_error = row['has_error']
-        print(f'text: {row['text']}')
-        predicted_ast_text = model.inference(data_in, ast_merges)
+    for _, row in val_samples.iterrows():
+        print(f'text: {row.text}')
+        predicted_ast_text = model.inference(row.x_in, ast_merges)
         print(f'P(#{predicted_ast_text.count('(') - predicted_ast_text.count(')')}): {predicted_ast_text}')
-        target_ast_text = sample_decode(data_out, ast_merges)
+        target_ast_text = sample_decode(row.x_out, ast_merges)
 
         print(f"T(#{target_ast_text.count('(') - target_ast_text.count(')')}): {target_ast_text}")
         equal = predicted_ast_text == target_ast_text
@@ -122,7 +119,7 @@ def run(num_samples):
             is_close = False
 
         computation_scores.append(int(is_close))
-        print(f'{has_error=} | AST are equal: {equal} | predicted: {predicted_res.value} target: {target_res.value} | computation is equal: {is_close}\n')
+        print(f'{row.has_error=} | AST are equal: {equal} | predicted: {predicted_res.value} target: {target_res.value} | computation is equal: {is_close}\n')
 
     print(f'Avg performance tree_scores: {round(statistics.mean(tree_scores)*100, 3)}%')
     computation_percentage = statistics.mean(computation_scores) * 100

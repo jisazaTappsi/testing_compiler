@@ -2,6 +2,7 @@ import os
 import json
 
 import pandas as pd
+import torch
 
 from tokens import *
 from util import *
@@ -155,8 +156,12 @@ def add_pad_tokens_and_trim(ids, block_size):
     return ids + [TOKEN_IDS[PAD]] * max(0, block_size - len(ids) + 1)
 
 
-def get_code_dicts(df):
-    return df.to_dict(orient='records')
+def df_to_tensors(df):
+    """Convert DataFrame with x_in/x_out columns to stacked tensors (one-time conversion)."""
+    x_out = torch.tensor([row[:block_size] for row in df['x_out']], dtype=torch.long)
+    x_in = torch.tensor([row[:block_size] for row in df['x_in']], dtype=torch.long)
+    y = torch.tensor([row[1:block_size + 1] for row in df['x_out']], dtype=torch.long)
+    return {'x_out': x_out, 'x_in': x_in, 'y': y}
 
 
 def get_train_data(iterable):
@@ -174,14 +179,15 @@ def get_code_data():
     df = pd.read_pickle(dataset_name)
     df = df.head(max_samples)
     lex_merges, ast_merges = get_merges()
-    dicts = get_code_dicts(df)
 
-    train_dicts = get_train_data(dicts)
-    val_dicts = get_val_data(dicts)
-    print(f'Training samples: {len(train_dicts)}, Validation samples: {len(val_dicts)}')
+    train_df = get_train_data(df)
+    val_df = get_val_data(df)
+    train_tensors = df_to_tensors(train_df)
+    val_tensors = df_to_tensors(val_df)
+    print(f'Training samples: {len(train_df)}, Validation samples: {len(val_df)}')
     return {
-        'train': train_dicts,
-        'val': val_dicts
+        'train': train_tensors,
+        'val': val_tensors
     }, lex_merges, ast_merges
 
 

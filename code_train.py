@@ -9,12 +9,12 @@ torch.manual_seed(42)
 
 
 def get_batch(my_data):
-    """my_data is a two dimension stacked pair tensor"""
-    random_sample_indexes = torch.randint(len(my_data), (batch_size,))
-    x_out = torch.stack([torch.tensor(my_data[i]['x_out'][:block_size]) for i in random_sample_indexes])
-    x_in = torch.stack([torch.tensor(my_data[i]['x_in'][:block_size]) for i in random_sample_indexes])
-    y = torch.stack([torch.tensor(my_data[i]['x_out'][1:block_size+1]) for i in random_sample_indexes])
-    x_out, x_in, y = x_out.to(device), x_in.to(device), y.to(device)
+    """my_data is a dict of tensors: x_out, x_in, y each (N, block_size)."""
+    N = my_data['x_out'].size(0)
+    ix = torch.randint(N, (batch_size,))
+    x_out = my_data['x_out'][ix].to(device)
+    x_in = my_data['x_in'][ix].to(device)
+    y = my_data['y'][ix].to(device)
     return {'x_out': x_out, 'x_in': x_in, 'y': y}
 
 
