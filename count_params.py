@@ -27,8 +27,10 @@ df = pd.read_pickle(dataset_name)
 df = df.head(max_samples_count_params)
 
 lex_merges, ast_merges = data.get_merges()
-lens0 = [len(row['x_in']) for _, row in df.iterrows()]
-lens1 = [len(row['x_out']) for _, row in df.iterrows()]
+# Should use the "usable" tokens here, therefore it encodes, rather than simply the x_in and x_out,
+# because it has the pad tokens, that effectively have 0 information.
+lens0 = [len(data.encode(row['lex_text'], lex_merges)) for _, row in df.iterrows()]
+lens1 = [len(data.encode(row['ast_text'], ast_merges)) for _, row in df.iterrows()]
 avg_tokens_per_sentence = statistics.mean(lens1)
 
 print(f'total params: {param_count}')
