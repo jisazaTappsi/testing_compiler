@@ -27,13 +27,15 @@ df = pd.read_pickle(dataset_name)
 df = df.head(max_samples_count_params)
 
 lex_merges, ast_merges = data.get_merges()
-lens0 = [len(data.encode(row['lex_text'], lex_merges)) for _, row in df.iterrows()]
-lens1 = [len(data.encode(row['ast_text'], ast_merges)) for _, row in df.iterrows()]
+lens0 = [len(row['x_in']) for _, row in df.iterrows()]
+lens1 = [len(row['x_out']) for _, row in df.iterrows()]
 avg_tokens_per_sentence = statistics.mean(lens1)
 
 print(f'total params: {param_count}')
 print(f'Should train on {token_count} tokens')
-print(f'Should train on {round(token_count/avg_tokens_per_sentence)} sentences')
+sentences = round(token_count/avg_tokens_per_sentence)
+print(f'Should train on {sentences} sentences')
+print(f'Should train for {round(sentences / batch_size)} iterations')
 print(f'stats are: {statistics.mean(lens0)=}, {statistics.stdev(lens0)=}, {max(lens0)=}, {min(lens0)=}')
 print(f'stats are: {avg_tokens_per_sentence=}, {statistics.stdev(lens1)=}, {max(lens1)=}, {min(lens1)=}')
 

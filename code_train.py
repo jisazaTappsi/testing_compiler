@@ -67,8 +67,7 @@ class MaskedHead(nn.Module):
         self.key = nn.Linear(n_embed, head_size, bias=False)
         self.query = nn.Linear(n_embed, head_size, bias=False)
         self.value = nn.Linear(n_embed, head_size, bias=False)
-        self.register_buffer('tril',
-                             torch.tril(torch.ones(block_size, block_size)))
+        self.register_buffer('tril', torch.tril(torch.ones(block_size, block_size)))
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x_out):
@@ -259,7 +258,6 @@ def train():
         model.train()
         optimizer = torch.optim.AdamW(model.parameters(), lr=lr_min)
         scheduler = None
-        learning_rate_decay = False
     except FileNotFoundError:
         print('Creating model from scratch')
         optimizer = torch.optim.AdamW(model.parameters(), lr=lr_peak)
