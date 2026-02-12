@@ -20,7 +20,6 @@ elif torch.backends.mps.is_available():
 
 def get_sample_val_data(num):
     df = pd.read_pickle(dataset_name)
-    df = df.head(max_samples)
 
     # Choose samples of validation data
     val_df = data.get_val_data(df)

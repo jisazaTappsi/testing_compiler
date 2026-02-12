@@ -119,7 +119,6 @@ def get_compressed_tokens(text):
 
 def load_code_tokens():
     df = pd.read_pickle(dataset_name)
-    df = df.head(max_samples)
     train_df = get_train_data(df).head(max_merge_samples)
 
     lex_text = ' '.join(train_df['lex_text'].tolist())
@@ -177,7 +176,6 @@ def get_val_data(iterable):
 def get_code_data():
     """We translate from Lex to AST, ie our x_in=LEX, while x_out=AST"""
     df = pd.read_pickle(dataset_name)
-    df = df.head(max_samples)
     lex_merges, ast_merges = get_merges()
 
     train_df = get_train_data(df)

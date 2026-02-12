@@ -757,6 +757,7 @@ def inference(token_list):
 
 
 def run_ai(fn, text):
+    print('using AI')
     lexer = Lexer(fn, text)
     token_list, error = lexer.make_tokens()
     if error: return None, error

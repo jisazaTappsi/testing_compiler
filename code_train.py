@@ -1,3 +1,4 @@
+import math
 import torch.nn as nn
 from torch.nn import functional as F
 
@@ -10,12 +11,13 @@ torch.manual_seed(42)
 
 def get_batch(my_data):
     """my_data is a dict of tensors: x_out, x_in, y each (N, block_size)."""
-    N = my_data['x_out'].size(0)
-    ix = torch.randint(N, (batch_size,))
-    x_out = my_data['x_out'][ix].to(device)
-    x_in = my_data['x_in'][ix].to(device)
-    y = my_data['y'][ix].to(device)
-    return {'x_out': x_out, 'x_in': x_in, 'y': y}
+    size = my_data['x_out'].size(0)
+    ix = torch.randint(size, (batch_size,))
+    return {
+        'x_out': my_data['x_out'][ix].to(device),
+        'x_in': my_data['x_in'][ix].to(device),
+        'y': my_data['y'][ix].to(device)
+    }
 
 
 @torch.no_grad()
@@ -235,6 +237,17 @@ class CrossAttentionTransformer(nn.Module):
             return CrossAttentionTransformer.fix_unmatched_parenthesis(predicted_ast_text)
 
 
+def get_lr(step, learning_rate_decay=True):
+    if not learning_rate_decay:
+        return lr_min
+    if step < warmup_iters:
+        return lr_peak * (step + 1) / warmup_iters  # avoid 0 on first step
+    decay_iters = max_iters - warmup_iters
+    progress = (step - warmup_iters) / decay_iters
+    min_ratio = lr_min / lr_peak
+    return lr_peak * (min_ratio + (1 - min_ratio) * 0.5 * (1 + math.cos(math.pi * progress)))
+
+
 def train():
     dataset, lex_merges, ast_merges = data.get_code_data()
     model = CrossAttentionTransformer()
@@ -244,20 +257,27 @@ def train():
         model.load_state_dict(torch.load(code_model_name))
         print('training an existing model')
         model.train()
+        optimizer = torch.optim.AdamW(model.parameters(), lr=lr_min)
+        scheduler = None
+        learning_rate_decay = False
     except FileNotFoundError:
         print('Creating model from scratch')
+        optimizer = torch.optim.AdamW(model.parameters(), lr=lr_peak)
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda step: get_lr(step) / lr_peak)
+        learning_rate_decay = True
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
     last_losses = None
     for iter in range(max_iters):
         if iter % eval_interval == 0:
             last_losses = estimate_loss(dataset, model)
-            print(f"step {iter} train loss: {last_losses['train']:.4f}, val loss: {last_losses['val']:.4f}")
+            print(f"step {iter} train loss: {last_losses['train']:.4f}, val loss: {last_losses['val']:.4f}, lr: {get_lr(iter, learning_rate_decay):.2e}")
         batch_dict = get_batch(dataset['train'])
         logits, loss = model(**batch_dict)
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
         optimizer.step()
+        if scheduler:
+            scheduler.step()
 
     # Save the model after training
     torch.save(model.state_dict(), code_model_name)

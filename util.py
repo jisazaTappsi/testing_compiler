@@ -2,9 +2,11 @@ import torch
 
 batch_size = 64  # 32
 block_size = 64  # 256
-max_iters = 15_000
+max_iters = 30_001
 eval_interval = 500
-learning_rate = 9e-4  # 3e-4
+lr_peak = 8e-4  # peak learning rate
+lr_min = 1e-4  # min learning rate
+warmup_iters = 0.03 * max_iters   # linear warmup steps (e.g. ~3% of max_iters)
 eval_iters = 200
 dropout = 0.2
 n_head = 3  # 4

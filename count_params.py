@@ -6,6 +6,7 @@ from util import *
 from code_train import CrossAttentionTransformer
 
 data_to_params_ratio = 20
+max_samples_count_params = 1_000
 
 
 def count_parameters(model):
@@ -23,7 +24,7 @@ model.eval()
 param_count = count_parameters(model)
 token_count = data_to_params_ratio * param_count
 df = pd.read_pickle(dataset_name)
-df = df.head(max_samples)
+df = df.head(max_samples_count_params)
 
 lex_merges, ast_merges = data.get_merges()
 lens0 = [len(data.encode(row['lex_text'], lex_merges)) for _, row in df.iterrows()]

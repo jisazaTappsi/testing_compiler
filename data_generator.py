@@ -8,7 +8,7 @@ import basic
 import tokens
 from util import *
 
-num_samples = 2_000_000
+num_samples = 5_000_000
 
 
 def log_scale_int(low: int, high: int, base: float = math.e) -> int:
@@ -239,9 +239,10 @@ def generate():
             invalid_count += 1
             continue
 
-    # Save dataset as a Pandas DataFrame (pickled)
     df = pd.DataFrame(rows)
-    df.to_pickle(dataset_name)
+    # Random shuffle with random seed
+    df = df.sample(frac=1, random_state=random.randint(0, 2**31 - 1)).reset_index(drop=True)
+    df.to_pickle(dataset_name)  # Save dataset as a Pandas DataFrame (pickled)
 
     print(f"\nValid: {valid_count}, Invalid: {invalid_count}, Success rate: {valid_count/num_samples*100:.1f}%")
 
