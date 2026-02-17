@@ -221,6 +221,9 @@ class VarAccessNode:
         self.pos_start = self.var_name_tok.pos_start
         self.pos_end = self.var_name_tok.pos_end
 
+    def __repr__(self):
+        return f'{self.var_name_tok}'
+
 
 class VarAssignNode:
     def __init__(self, var_name_tok, value_node):
@@ -228,6 +231,9 @@ class VarAssignNode:
         self.value_node = value_node
         self.pos_start = self.var_name_tok.pos_start
         self.pos_end = self.var_name_tok.pos_end
+
+    def __repr__(self):
+        return f'{self.var_name_tok}:{self.value_node}'
 
 
 class BinOpNode:
@@ -306,6 +312,9 @@ class Parser:
         - (INT:2 MUL INT:2) -> BinOpNode
         - (MINUS INT:5) -> UnaryOpNode
         - INT:3 -> NumberNode
+        - IDENTIFIER:x -> VarAccessNode (variable retrieval)
+        - IDENTIFIER:x:INT:5 -> VarAssignNode (assignment; value can be any expr string)
+        - IDENTIFIER:x:(INT:2 ADD INT:3) -> VarAssignNode with expr value
         """
 
         text = text.strip()
@@ -344,14 +353,27 @@ class Parser:
                         return i
             return -1
         
-        # Try to parse as a simple token (NumberNode) - no parentheses
+        # Try to parse as a simple token or identifier (no parentheses)
         if not text.startswith('('):
-            # Check if it's a token pattern (e.g., "INT:2" or "MUL")
+            # Variable: IDENTIFIER:name (access) or IDENTIFIER:name:expr (assignment)
+            if text.startswith('IDENTIFIER:'):
+                parts = text.split(':', 2)  # at most 3 parts so value can contain colons
+                if len(parts) == 2:
+                    # VarAccessNode: IDENTIFIER:name_var
+                    tok = parse_token(f"IDENTIFIER:{parts[1]}")
+                    return VarAccessNode(tok)
+                elif len(parts) == 3:
+                    # VarAssignNode: IDENTIFIER:name_var:value (value is expr string)
+                    tok = parse_token(f"IDENTIFIER:{parts[1]}")
+                    value_node = Parser.get_tree_from_string(parts[2].strip())
+                    return VarAssignNode(tok, value_node)
+                else:
+                    raise ValueError(f"Invalid IDENTIFIER format: {text}")
+            # Number or other token (e.g. "INT:2", "FLOAT:3.14", "MUL")
             if re.match(r'^[A-Z_]+(:.+)?$', text):
                 tok = parse_token(text)
                 return NumberNode(tok)
             else:
-                # Fallback: try to parse as a token anyway
                 tok = parse_token(text)
                 return NumberNode(tok)
         
@@ -471,7 +493,7 @@ class Parser:
 
     def expr(self):
         res = ParseResult()
-        if self.current_tok.matches(KEYWORD, 'VAR'):
+        if self.current_tok.matches(KEYWORD, 'var'):
             res.register_advance()
             self.advance()
             if self.current_tok.type != IDENTIFIER:
@@ -500,7 +522,7 @@ class Parser:
         if res.error:
             return res.failure(InvalidSyntaxError(
             self.current_tok.pos_start, self.current_tok.pos_end,
-            f'Expected VAR, int, float, "+", "-", "(" or identifier but got "{self.current_tok.type}"'
+            f'Expected var, int, float, "+", "-", "(" or identifier but got "{self.current_tok.type}"'
         ))
         return res.success(node)
 
@@ -692,17 +714,23 @@ class Interpreter:
         number = res.register(self.visit(node.node, context))
         if res.error: return res
 
-        error = None
         if node.op_tok.type == MINUS:
             number, error = number.mul_by(Number(-1))
-        if error:
-            return res.failure(error)
-        else:
-            return res.success(number.set_pos(node.pos_start, node.pos_end))
+            if error:
+                return res.failure(error)
+        elif node.op_tok.type == PLUS:
+            pass  # unary plus is a no-op
+        return res.success(number.set_pos(node.pos_start, node.pos_end))
 
 ########################
 # RUN
 ########################
+
+def get_symbol_table():
+    table = SymbolTable()
+    table.set('null', Number(0))
+    return table
+
 
 global_symbol_table = SymbolTable()
 global_symbol_table.set('null', Number(0))
@@ -724,6 +752,7 @@ def run(fn, text):
     context.symbol_table = global_symbol_table
     res = interpreter.visit(ast.node, context)
 
+    print(f'Symbol table: {global_symbol_table.symbols}')
     return res.value, res.error
 
 
@@ -761,14 +790,14 @@ def run_ai(fn, text):
     lexer = Lexer(fn, text)
     token_list, error = lexer.make_tokens()
     if error: return None, error
-    print(token_list)
 
     # Generate AST
     ast_node = inference(token_list)
-    print(ast_node)
 
     # Run
     interpreter = Interpreter()
-    res = interpreter.visit(ast_node, '<program>')
+    context = Context('<program>')
+    context.symbol_table = global_symbol_table
+    res = interpreter.visit(ast_node, context)
 
     return res.value, res.error

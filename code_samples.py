@@ -42,14 +42,15 @@ def get_hand_made_data():
 
         ast = basic.Parser(token_list).parse()
         interpreter = basic.Interpreter()
-        res = interpreter.visit(ast.node, '<program>')
+        ctx = basic.Context('<program>')
+        ctx.symbol_table = basic.get_symbol_table()
+        res = interpreter.visit(ast.node, ctx)
 
         rows.append(
             {
                 'lex_text': lexer_text,
                 'ast_text': f'{tokens.SOF} {ast.node} {tokens.EOF}',
                 'result': res.value,
-                'has_error': False,
                 'text': hand_sample,
                 'x_in': data.add_pad_tokens_and_trim(data.encode(lexer_text, {}), block_size),
                 'x_out': data.add_pad_tokens_and_trim(data.encode(f'{tokens.SOF} {ast.node} {tokens.EOF}', {}), block_size),
@@ -64,6 +65,27 @@ def sample_decode(my_data, merges):
     return CrossAttentionTransformer.fix_unmatched_parenthesis(data.decode(my_data, merges))
 
 
+def symbol_tables_equal(pred_symbols, target_symbols):
+    """Compare two symbol-table dicts (name -> basic.Number). Same keys and same numeric values."""
+    if set(pred_symbols.keys()) != set(target_symbols.keys()):
+        return False
+    for name in pred_symbols:
+        p, t = pred_symbols[name], target_symbols[name]
+        if type(p) != type(t):
+            return False
+        if hasattr(p, 'value'):  # basic.Number
+            try:
+                if not torch.allclose(torch.tensor(float(p.value)), torch.tensor(float(t.value))):
+                    return False
+            except (TypeError, ValueError):
+                if p.value != t.value:
+                    return False
+        else:
+            if p != t:
+                return False
+    return True
+
+
 def run(num_samples):
 
     # Load data and merges
@@ -76,54 +98,66 @@ def run(num_samples):
     model.load_state_dict(torch.load(code_model_name))
     model.eval()
 
-    # Run generation
-    tree_scores = []
-    computation_scores = []
-    for _, row in val_samples.iterrows():
-        print(f'text: {row.text}')
-        predicted_ast_text = model.inference(row.x_in, ast_merges)
-        print(f'P(#{predicted_ast_text.count('(') - predicted_ast_text.count(')')}): {predicted_ast_text}')
-        target_ast_text = sample_decode(row.x_out, ast_merges)
+    tree_scores_per_sample = []
+    computation_scores_per_sample = []
+    for _, sample in val_samples.iterrows():
+        predicted_ctx = basic.Context('<program>')
+        predicted_ctx.symbol_table = basic.get_symbol_table()
+        target_ctx = basic.Context('<program>')
+        target_ctx.symbol_table = basic.get_symbol_table()
+        sample_run_ok = True
+        statement_ast_matches = []
 
-        print(f"T(#{target_ast_text.count('(') - target_ast_text.count(')')}): {target_ast_text}")
-        equal = predicted_ast_text == target_ast_text
-        tree_scores.append(int(equal))
+        for x_in, x_out in zip(sample.x_in, sample.x_out):
+            predicted_ast_text = model.inference(x_in, ast_merges)
+            print(f'P(#{predicted_ast_text.count("(") - predicted_ast_text.count(")")}): {predicted_ast_text}')
+            target_ast_text = sample_decode(x_out, ast_merges)
+            print(f"T(#{target_ast_text.count('(') - target_ast_text.count(')')}): {target_ast_text}")
 
-        try:
-            predicted_ast = Parser.get_tree_from_string(predicted_ast_text)
-            predicted_res = basic.Interpreter().visit(predicted_ast, '<program>')
-            if predicted_res.error:
-                print(f'predicted_ast interpretation error: {predicted_res.error}\n')
-                computation_scores.append(0)
-                continue
-        except Exception as e:
-            print(f'building/executing predicted AST gets: {e}, continuing...\n')
-            computation_scores.append(0)
-            continue
+            statement_ast_matches.append(predicted_ast_text == target_ast_text)
 
-        try:
-            target_ast = Parser.get_tree_from_string(target_ast_text)
-            target_res = basic.Interpreter().visit(target_ast, '<program>')
-        except Exception as e:
-            # If the algorithm is cutting the data, then the algorithm is at fault... :(
-            print(f'building/executing target AST gets: {e}, continuing...\n')
-            computation_scores.append(0)
-            continue
+            try:
+                predicted_ast = Parser.get_tree_from_string(predicted_ast_text)
+                predicted_res = basic.Interpreter().visit(predicted_ast, predicted_ctx)
+                if predicted_res.error:
+                    sample_run_ok = False
+                    break
+            except Exception as e:
+                print(f'building/executing predicted AST gets: {e}, continuing...\n')
+                sample_run_ok = False
+                break
 
-        try:
-            is_close = torch.allclose(torch.tensor(float(predicted_res.value.value)),
-                                      torch.tensor(float(target_res.value.value)))
-        except Exception as e:
-            print(f'cannot compare target and predicted results: {e}')
-            is_close = False
+            try:
+                target_ast = Parser.get_tree_from_string(target_ast_text)
+                target_res = basic.Interpreter().visit(target_ast, target_ctx)
+                if target_res.error:
+                    sample_run_ok = False
+                    break
+            except Exception as e:
+                print(f'building/executing target AST gets: {e}, continuing...\n')
+                sample_run_ok = False
+                break
 
-        computation_scores.append(int(is_close))
-        print(f'{row.has_error=} | AST are equal: {equal} | predicted: {predicted_res.value} target: {target_res.value} | computation is equal: {is_close}\n')
+        # Per-sample tree: 1 iff every statement had correct AST AND the sample ran
+        # (this way, any parse/interpret error forces tree=0, and if tree=1 we know
+        # both predicted and target programs were actually executable).
+        tree_ok = sample_run_ok and all(statement_ast_matches)
+        tree_scores_per_sample.append(int(tree_ok))
 
-    print(f'Avg performance tree_scores: {round(statistics.mean(tree_scores)*100, 3)}%')
-    computation_percentage = statistics.mean(computation_scores) * 100
-    print(f'Avg performance computation: {round(computation_percentage, 3)}%')
-    return computation_percentage
+        if sample_run_ok:
+            tables_match = symbol_tables_equal(
+                predicted_ctx.symbol_table.symbols,
+                target_ctx.symbol_table.symbols,
+            )
+            computation_scores_per_sample.append(int(tables_match))
+        else:
+            computation_scores_per_sample.append(0)
+
+    n_samples = len(computation_scores_per_sample)
+    tree_pct = statistics.mean(tree_scores_per_sample) * 100 if tree_scores_per_sample else 0
+    computation_pct = statistics.mean(computation_scores_per_sample) * 100 if computation_scores_per_sample else 0
+    print(f'Per-sample (n={n_samples}): Tree {round(tree_pct, 3)}%  |  Computation {round(computation_pct, 3)}%')
+    return computation_pct
 
 
 if __name__ == '__main__':

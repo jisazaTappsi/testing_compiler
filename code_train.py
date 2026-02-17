@@ -258,6 +258,7 @@ def train():
         model.train()
         optimizer = torch.optim.AdamW(model.parameters(), lr=lr_min)
         scheduler = None
+        learning_rate_decay = False
     except FileNotFoundError:
         print('Creating model from scratch')
         optimizer = torch.optim.AdamW(model.parameters(), lr=lr_peak)
@@ -268,7 +269,8 @@ def train():
     for iter in range(max_iters):
         if iter % eval_interval == 0:
             last_losses = estimate_loss(dataset, model)
-            print(f"step {iter} train loss: {last_losses['train']:.4f}, val loss: {last_losses['val']:.4f}, lr: {get_lr(iter, learning_rate_decay):.2e}")
+            print(f"step {iter} train loss: {last_losses['train']:.4f}, val loss: {last_losses['val']:.4f}, "
+                  f"lr: {get_lr(iter, learning_rate_decay):.2e}")
         batch_dict = get_batch(dataset['train'])
         logits, loss = model(**batch_dict)
         optimizer.zero_grad(set_to_none=True)

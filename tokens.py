@@ -13,6 +13,7 @@ EQ = 'EQ'
 EOF = 'EOF'  # End of file
 SOF = 'SOF'  # Start of file
 PAD = 'PAD'  # After EOF
+VAR = 'var'
 
 TOKENS = [
     INT,
@@ -30,10 +31,11 @@ TOKENS = [
     EOF,
     SOF,
     PAD,
+    VAR,
 ]
 
 KEYWORDS = [
-    'VAR'
+    VAR
 ]
 
 TOKEN_BASIC_IDS = {

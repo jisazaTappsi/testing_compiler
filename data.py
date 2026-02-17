@@ -157,9 +157,9 @@ def add_pad_tokens_and_trim(ids, block_size):
 
 def df_to_tensors(df):
     """Convert DataFrame with x_in/x_out columns to stacked tensors (one-time conversion)."""
-    x_out = torch.tensor([row[:block_size] for row in df['x_out']], dtype=torch.long)
-    x_in = torch.tensor([row[:block_size] for row in df['x_in']], dtype=torch.long)
-    y = torch.tensor([row[1:block_size + 1] for row in df['x_out']], dtype=torch.long)
+    x_out = torch.tensor([row[:block_size] for statement in df['x_out'] for row in statement], dtype=torch.long)
+    x_in = torch.tensor([row[:block_size] for statement in df['x_in'] for row in statement], dtype=torch.long)
+    y = torch.tensor([row[1:block_size + 1] for statement in df['x_out'] for row in statement], dtype=torch.long)
     return {'x_out': x_out, 'x_in': x_in, 'y': y}
 
 
