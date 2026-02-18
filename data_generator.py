@@ -267,7 +267,18 @@ def generate():
                     is_valid = False
                     break
                 lexer_text = ' '.join(t.__repr__() for t in token_list)
-                sample.lexer_text += f'\n{lexer_text}'
+                sample.lexer_text += f"\n{lexer_text}"
+
+                if random.random() < 0.5:
+                    text_error = text.replace('var ', ' ')
+                    lexer_error = basic.Lexer('<stdin>', text_error)
+                    token_list_error, error = lexer_error.make_tokens()
+                    if error:
+                        print('Lexing is invalid!')
+                        invalid_count += 1
+                        is_valid = False
+                        break
+                    lexer_text = ' '.join(t.__repr__() for t in token_list_error)
 
                 # Try to parse
                 parser = basic.Parser(token_list)

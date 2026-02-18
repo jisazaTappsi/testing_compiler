@@ -100,7 +100,7 @@ def run(num_samples):
 
     tree_scores_per_sample = []
     computation_scores_per_sample = []
-    for _, sample in val_samples.iterrows():
+    for idx, sample in val_samples.iterrows():
         predicted_ctx = basic.Context('<program>')
         predicted_ctx.symbol_table = basic.get_symbol_table()
         target_ctx = basic.Context('<program>')
@@ -108,11 +108,12 @@ def run(num_samples):
         sample_run_ok = True
         statement_ast_matches = []
 
+        print(f'{idx}:\n{sample.lexer_text}')
         for x_in, x_out in zip(sample.x_in, sample.x_out):
             predicted_ast_text = model.inference(x_in, ast_merges)
             print(f'P(#{predicted_ast_text.count("(") - predicted_ast_text.count(")")}): {predicted_ast_text}')
             target_ast_text = sample_decode(x_out, ast_merges)
-            print(f"T(#{target_ast_text.count('(') - target_ast_text.count(')')}): {target_ast_text}")
+            print(f"T(#{target_ast_text.count('(') - target_ast_text.count(')')}): {target_ast_text}\n")
 
             statement_ast_matches.append(predicted_ast_text == target_ast_text)
 
@@ -145,13 +146,13 @@ def run(num_samples):
         tree_scores_per_sample.append(int(tree_ok))
 
         if sample_run_ok:
-            tables_match = symbol_tables_equal(
-                predicted_ctx.symbol_table.symbols,
-                target_ctx.symbol_table.symbols,
-            )
+            tables_match = symbol_tables_equal(predicted_ctx.symbol_table.symbols, target_ctx.symbol_table.symbols)
             computation_scores_per_sample.append(int(tables_match))
         else:
+            tables_match = False
             computation_scores_per_sample.append(0)
+
+        print(f'Trees are equal: {tree_ok} | predicted: {predicted_ctx.symbol_table.symbols} target: {target_ctx.symbol_table.symbols} | computation is equal: {tables_match}\n')
 
     n_samples = len(computation_scores_per_sample)
     tree_pct = statistics.mean(tree_scores_per_sample) * 100 if tree_scores_per_sample else 0

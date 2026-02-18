@@ -192,18 +192,18 @@ def test_parsing_parentheses():
 def test_parsing_unary_with_parentheses():
     """Test parsing unary operator with parentheses: -(1 + 2)"""
     ast, error = basic.run('<stdin>', "-(1 + 2)")
-    
+
     assert error is None
     assert ast is not None
-    
+
     # Verify it's a UnaryOpNode
     assert isinstance(ast, basic.UnaryOpNode)
     assert ast.op_tok.type == basic.MINUS
-    
+
     # The node inside should be a BinOpNode (addition)
     assert isinstance(ast.node, basic.BinOpNode)
     assert ast.node.op_tok.type == basic.PLUS
-    
+
     # Verify addition operands: 1 + 2
     assert isinstance(ast.node.left_node, basic.NumberNode)
     assert ast.node.left_node.tok.value == 1
