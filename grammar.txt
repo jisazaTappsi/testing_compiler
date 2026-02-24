@@ -1,8 +1,13 @@
-expr     : KEYWORD:var IDENTIFIER EQ expr
-         : (term(PLUS|MINUS) term)*
+expr       : KEYWORD:var IDENTIFIER EQ expr
+           : comp-expr ((KEYWORD:AND|KEYWORD:OR) comp-expr)*
 
-term     : factor ((MUL|DIV) factor)*
+comp-expr  : NOT comp-expr
+           : arith-expr ((EE|LT|GT|LTE|GTE) arith-expr)*
 
-factor   : INT|FLOAT|IDENTIFIER
-         : (PLUS|MINUS) factor
-         : LPAREN expr RPAREN
+arith-expr : term ((PLUS|MINUS) term)*
+
+term       : factor ((MUL|DIV) factor)*
+
+factor     : INT|FLOAT|IDENTIFIER
+           : (PLUS|MINUS) factor
+           : LPAREN expr RPAREN

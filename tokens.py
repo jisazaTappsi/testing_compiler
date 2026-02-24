@@ -10,10 +10,21 @@ POW = 'POW'
 LPAREN = 'LPAREN'
 RPAREN = 'RPAREN'
 EQ = 'EQ'
+EE = 'EE'
+NE = 'NE'
+GT = 'GT'
+LT = 'LT'
+GTE = 'GTE'
+LTE = 'LTE'
+AND = 'AND'
+OR = 'OR'
+NOT = 'NOT'
+VAR = 'var'
+# Add new tokens here
+
 EOF = 'EOF'  # End of file
 SOF = 'SOF'  # Start of file
 PAD = 'PAD'  # After EOF
-VAR = 'var'
 
 TOKENS = [
     INT,
@@ -28,14 +39,28 @@ TOKENS = [
     LPAREN,
     RPAREN,
     EQ,
+    EE,
+    NE,
+    GT,
+    LT,
+    GTE,
+    LTE,
+    AND,
+    OR,
+    NOT,
+    VAR,
+    # Add new tokens here
+
     EOF,
     SOF,
     PAD,
-    VAR,
 ]
 
 KEYWORDS = [
-    VAR
+    VAR,
+    AND,
+    OR,
+    NOT,
 ]
 
 TOKEN_BASIC_IDS = {
