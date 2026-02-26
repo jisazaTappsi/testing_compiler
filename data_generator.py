@@ -80,11 +80,23 @@ def generate_term(depth=0, max_depth=5, allowed_vars=None):
 
     result = generate_factor(depth, max_depth, allowed_vars)
     
-    # Randomly add more factors with MUL or DIV operators
-    num_ops = random.randint(0, 2)  # 0-2 additional operations
+    # Randomly add more factors with MUL or DIV operators (often 0 to keep equations small)
+    num_ops = 1 if random.random() < 0.3 else 0
     for _ in range(num_ops):
-        op = random.choice(['*', '/'])
-        factor = generate_factor(depth, max_depth, allowed_vars)
+
+        # Desperate attempt at trying to decrease the division by zeroes...
+        op = random.choices(['*', '/'], weights=[0.9, 0.1], k=1)[0]
+
+        while True:  # Don't allow division by zero
+            factor = generate_factor(depth, max_depth, allowed_vars)
+            try:
+                factor = factor.replace('None', '0')  # in our interpreter None is a 0
+                mini_expr = int(eval(factor))
+                if op != '/' or mini_expr != 0:
+                    break
+            except:
+                break
+
         result = f"{result}{op}{factor}"
     
     return result
@@ -102,8 +114,8 @@ def generate_expr(depth=0, max_depth=5, allowed_vars=None):
     
     result = generate_term(depth, max_depth, allowed_vars)
     
-    # Randomly add more terms with PLUS or MINUS operators
-    num_ops = random.randint(0, 2)  # 0-2 additional operations
+    # Randomly add more terms with PLUS or MINUS operators (often 0 to keep equations small)
+    num_ops = 1 if random.random() < 0.25 else 0
     for _ in range(num_ops):
         op = random.choice(['+', '-'])
         term = generate_term(depth, max_depth, allowed_vars)
@@ -122,11 +134,11 @@ def generate_arithmetic_expression(use_variables=False, allowed_vars=None):
     vars_list = list(allowed_vars) if use_variables and allowed_vars else []
 
     # Start with a reasonable max_depth based on block_size. Deeper expressions tend to be longer.
-    max_depth = 3
+    max_depth = 2
     expr = generate_expr(depth=0, max_depth=max_depth, allowed_vars=vars_list)
 
-    # If expression is too long, regenerate with lower max_depth
-    while len(expr) > max_length//3:
+    # If expression is too long, regenerate with lower max_depth (stricter cap leaves headroom for comparisons/logic encoding)
+    while len(expr) > max_length//10:
         max_depth = max(1, max_depth - 1)
         expr = generate_expr(depth=0, max_depth=max_depth, allowed_vars=vars_list)
 
@@ -159,6 +171,60 @@ def _new_var_name(declared: list) -> str:
     return 'x'
 
 
+BOOLEAN_LITERALS = [tokens.NULL, tokens.TRUE, tokens.FALSE]
+
+
+def generate_program_expression(allowed_vars=None) -> str:
+    """
+    Generate an expression compatible with the full grammar, including
+    arithmetic, comparison operators, logical AND/OR, and the identifiers
+    True, False and null.
+    """
+    if allowed_vars is None:
+        allowed_vars = []
+
+    idents = list(allowed_vars) + BOOLEAN_LITERALS
+    use_vars = bool(idents)
+
+    def gen_arith():
+        return generate_arithmetic_expression(use_variables=use_vars, allowed_vars=idents)
+
+    # Start from either a boolean-like identifier or a plain arithmetic expression
+    if random.random() < 0.3:
+        expr = random.choice(BOOLEAN_LITERALS)
+    else:
+        expr = gen_arith()
+
+    # Optionally add one or more comparison operations (slightly lower so more fit in block_size)
+    if random.random() < 0.20:
+        num_comparisons = random.randint(0, 1)
+        for _ in range(num_comparisons):
+            op = random.choice(['==', '!=', '<', '>', '<=', '>='])
+            right = gen_arith()
+            expr = f"{expr}{op}{right}"
+
+    # Optional leading NOT (low prob to keep equations small)
+    if random.random() < 0.15:
+        expr = f"{tokens.NOT} {expr}"
+
+    # Optionally chain with AND/OR (often 0 to keep equations small)
+    num_logic_ops = 1 if random.random() < 0.2 else 0
+    for _ in range(num_logic_ops):
+        op = random.choice([tokens.AND, tokens.OR])
+        right = gen_arith()
+        # Sometimes turn the right-hand side into a comparison expression as well
+        if random.random() < 0.7:
+            num_cmp = random.randint(0, 1)
+            for _ in range(num_cmp):
+                cmp_op = random.choice(['==', '!=', '<', '>', '<=', '>='])
+                right = f"{right}{cmp_op}{gen_arith()}"
+        if random.random() < 0.3:
+            right = f"{tokens.NOT} {right}"
+        expr = f"{expr} {op} {right}"
+
+    return expr
+
+
 def generate_program_statements() -> list:
     """Generates a short program with valid statements. Each statement is either a variable declaration
     ('var x = expr') or a standalone expression. Expressions may use previously declared variables."""
@@ -170,12 +236,12 @@ def generate_program_statements() -> list:
         if not declared or random.random() < 0.6:
             # Variable declaration: var name = expr
             name = _new_var_name(declared)
-            expr = generate_arithmetic_expression(use_variables=True, allowed_vars=declared)
-            statements.append(f"var {name} = {expr}")
+            expr = generate_program_expression(allowed_vars=declared)
+            statements.append(f"{tokens.VAR} {name} = {expr}")
             declared.append(name)
         else:
             # Standalone expression (can use declared variables)
-            expr = generate_arithmetic_expression(use_variables=True, allowed_vars=declared)
+            expr = generate_program_expression(allowed_vars=declared)
             statements.append(expr)
 
     return statements
@@ -262,7 +328,7 @@ def generate():
             try:
                 token_list, error = lexer.make_tokens()
                 if error:
-                    print('Lexing is invalid!')
+                    print(f'Lexing is invalid!: {error.as_string()}')
                     invalid_count += 1
                     is_valid = False
                     break
@@ -274,7 +340,7 @@ def generate():
                     lexer_error = basic.Lexer('<stdin>', text_error)
                     token_list_error, error = lexer_error.make_tokens()
                     if error:
-                        print('Lexing is invalid!')
+                        print(f'Lexing is invalid: {error.as_string()}')
                         invalid_count += 1
                         is_valid = False
                         break
@@ -284,7 +350,7 @@ def generate():
                 parser = basic.Parser(token_list)
                 ast = parser.parse()
                 if ast.error:
-                    print('Parsing is invalid!')
+                    print(f'Parsing is invalid: {ast.error.as_string()}')
                     invalid_count += 1
                     is_valid = False
                     break
@@ -302,8 +368,8 @@ def generate():
                     is_valid = False
                     break
 
-                lex_encoded = data.encode(lexer_text, {})
-                ast_encoded = data.encode(ast_text, {})
+                lex_encoded = data.encode(lexer_text.replace(' ', ''), {})
+                ast_encoded = data.encode(ast_text.replace(' ', ''), {})
                 if len(lex_encoded) <= block_size and len(ast_encoded) <= block_size:
                     sample.x_in.append(data.add_pad_tokens_and_trim(lex_encoded, block_size))
                     sample.x_out.append(data.add_pad_tokens_and_trim(ast_encoded, block_size))
@@ -311,6 +377,7 @@ def generate():
                     if res.value:
                         sample.symbols['_output_list'].append(res.value)
                 else:
+                    print('Encodings are too long...')
                     invalid_count += 1
                     is_valid = False
                     break

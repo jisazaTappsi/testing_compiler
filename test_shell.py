@@ -1,4 +1,5 @@
 import basic
+import tokens
 from basic import EOF
 
 
@@ -209,3 +210,9 @@ def test_parsing_unary_with_parentheses():
     assert ast.node.left_node.tok.value == 1
     assert isinstance(ast.node.right_node, basic.NumberNode)
     assert ast.node.right_node.tok.value == 2
+
+
+def test_stupidly_simple_not():
+    ast, error = basic.run('<stdin>', f"{tokens.NOT} {tokens.TRUE} == {tokens.NULL}")
+    assert error is None
+

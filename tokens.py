@@ -16,12 +16,16 @@ GT = 'GT'
 LT = 'LT'
 GTE = 'GTE'
 LTE = 'LTE'
-AND = 'AND'
-OR = 'OR'
-NOT = 'NOT'
+AND = 'and'
+OR = 'or'
+NOT = 'not'
 VAR = 'var'
 # Add new tokens here
 
+
+NULL = 'None'
+TRUE = 'True'
+FALSE = 'False'
 EOF = 'EOF'  # End of file
 SOF = 'SOF'  # Start of file
 PAD = 'PAD'  # After EOF

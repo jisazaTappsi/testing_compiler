@@ -136,50 +136,50 @@ class Lexer:
         self.current_char = self.text[self.pos.idx] if self.pos.idx < len(self.text) else None
 
     def make_tokens(self):
-        tokens = [Token(SOF), ]
+        token_list = [Token(SOF), ]
         while self.current_char is not None:
             if self.current_char in [' ', '\t']:
                 self.advance()
             elif self.current_char in DIGITS + '.':
-                tokens.append(self.make_number())
+                token_list.append(self.make_number())
             elif self.current_char in LETTERS:
-                tokens.append(self.make_identifier())
+                token_list.append(self.make_identifier())
             elif self.current_char == '+':
-                tokens.append(Token(PLUS, pos_start=self.pos))
+                token_list.append(Token(PLUS, pos_start=self.pos))
                 self.advance()
             elif self.current_char == '-':
-                tokens.append(Token(MINUS, pos_start=self.pos))
+                token_list.append(Token(MINUS, pos_start=self.pos))
                 self.advance()
             elif self.current_char == '*':
-                tokens.append(Token(MUL, pos_start=self.pos))
+                token_list.append(Token(MUL, pos_start=self.pos))
                 self.advance()
             elif self.current_char == '/':
-                tokens.append(Token(DIV, pos_start=self.pos))
+                token_list.append(Token(DIV, pos_start=self.pos))
                 self.advance()
             elif self.current_char == '(':
-                tokens.append(Token(LPAREN, pos_start=self.pos))
+                token_list.append(Token(LPAREN, pos_start=self.pos))
                 self.advance()
             elif self.current_char == ')':
-                tokens.append(Token(RPAREN, pos_start=self.pos))
+                token_list.append(Token(RPAREN, pos_start=self.pos))
                 self.advance()
             elif self.current_char == '!':
                 tok, error = self.make_not_equals()
                 if error: return [], error
-                tokens.append(tok)
+                token_list.append(tok)
             elif self.current_char == '=':
-                tokens.append(self.make_equals())
+                token_list.append(self.make_equals())
             elif self.current_char == '<':
-                tokens.append(self.make_less_than())
+                token_list.append(self.make_less_than())
             elif self.current_char == '>':
-                tokens.append(self.make_greater_than())
+                token_list.append(self.make_greater_than())
             else:
                 pos_start = self.pos.copy()
                 char = self.current_char
                 self.advance()
                 return [], IllegalError(pos_start, self.pos, f'"{char}"')
 
-        tokens.append(Token(EOF, pos_start=self.pos))
-        return tokens, None
+        token_list.append(Token(EOF, pos_start=self.pos))
+        return token_list, None
 
     def make_number(self):
         num_str = ''
@@ -341,15 +341,15 @@ class ParseResult:
 ########################
 
 class Parser:
-    def __init__(self, tokens):
-        self.tokens = tokens
+    def __init__(self, token_list):
+        self.token_list = token_list
         self.tok_idx = -1
         self.advance()
 
     def advance(self):
         self.tok_idx += 1
-        if self.tok_idx < len(self.tokens):
-            self.current_tok = self.tokens[self.tok_idx]
+        if self.tok_idx < len(self.token_list):
+            self.current_tok = self.token_list[self.tok_idx]
         return self.current_tok
     
     @staticmethod
@@ -370,7 +370,7 @@ class Parser:
         # Helper function to parse a token string (e.g., "INT:2" or "MUL")
         def parse_token(token_str):
             token_str = token_str.strip()
-            # Create a dummy position for tokens
+            # Create a dummy position for token_list
             dummy_pos = Position(0, 0, 0, '<string>', '')
             if ':' in token_str:
                 parts = token_str.split(':', 1)
@@ -434,7 +434,7 @@ class Parser:
         content = text[1:end_idx].strip()
         
         # Split content by spaces, but preserve parentheses groups
-        tokens = []
+        token_list = []
         current_token = ""
         paren_depth = 0
         
@@ -443,7 +443,7 @@ class Parser:
             char = content[i]
             if char == '(':
                 if paren_depth == 0 and current_token.strip():
-                    tokens.append(current_token.strip())
+                    token_list.append(current_token.strip())
                     current_token = ""
                 current_token += char
                 paren_depth += 1
@@ -451,36 +451,36 @@ class Parser:
                 current_token += char
                 paren_depth -= 1
                 if paren_depth == 0:
-                    tokens.append(current_token.strip())
+                    token_list.append(current_token.strip())
                     current_token = ""
             elif char == ' ' and paren_depth == 0:
                 if current_token.strip():
-                    tokens.append(current_token.strip())
+                    token_list.append(current_token.strip())
                     current_token = ""
             else:
                 current_token += char
             i += 1
         
         if current_token.strip():
-            tokens.append(current_token.strip())
+            token_list.append(current_token.strip())
         
-        tokens = [t for t in tokens if t]  # Remove empty tokens
+        token_list = [t for t in token_list if t]  # Remove empty token_list
 
-        if len(tokens) == 1:
-            return Parser.get_tree_from_string(tokens[0])
-        elif len(tokens) == 2:
+        if len(token_list) == 1:
+            return Parser.get_tree_from_string(token_list[0])
+        elif len(token_list) == 2:
             # UnaryOpNode: (op node)
-            op_tok = parse_token(tokens[0])
-            node = Parser.get_tree_from_string(tokens[1])
+            op_tok = parse_token(token_list[0])
+            node = Parser.get_tree_from_string(token_list[1])
             return UnaryOpNode(op_tok, node)
-        elif len(tokens) == 3:
+        elif len(token_list) == 3:
             # BinOpNode: (left op right)
-            left = Parser.get_tree_from_string(tokens[0])
-            op_tok = parse_token(tokens[1])
-            right = Parser.get_tree_from_string(tokens[2])
+            left = Parser.get_tree_from_string(token_list[0])
+            op_tok = parse_token(token_list[1])
+            right = Parser.get_tree_from_string(token_list[2])
             return BinOpNode(left, op_tok, right)
         else:
-            raise ValueError(f"Unexpected number of tokens: {len(tokens)} in: {content}")
+            raise ValueError(f"Unexpected number of tokens: {len(token_list)} in: {content}")
 
     def parse(self):
         if self.current_tok.type == SOF:
@@ -544,7 +544,7 @@ class Parser:
 
     def comp_expr(self):
         res = ParseResult()
-        if self.current_tok.matches(KEYWORD, 'NOT'):
+        if self.current_tok.matches(KEYWORD, NOT):
             op_tok = self.current_tok
             res.register_advance()
             self.advance()
@@ -557,7 +557,7 @@ class Parser:
         if res.error:
             return res.failure(InvalidSyntaxError(
             self.current_tok.pos_start, self.current_tok.pos_end,
-            f'Expected int, float, identifier "+", "-", "(", or "NOT" but got "{self.current_tok.type}"'
+            f'Expected int, float, identifier "+", "-", "(", or "{NOT}" but got "{self.current_tok.type}"'
             ))
         return res.success(node)
 
@@ -852,23 +852,27 @@ class Interpreter:
 
 def get_symbol_table():
     table = SymbolTable()
-    table.set('null', Number(0))
+    # Start from the same built-ins as the global symbol table (NULL/TRUE/FALSE).
+    table.symbols.update(global_symbol_table.symbols)
+    table.set(NULL, Number(0))
+    table.set(TRUE, Number(1))
+    table.set(FALSE, Number(0))
     return table
 
 
 global_symbol_table = SymbolTable()
-global_symbol_table.set('NULL', Number(0))
-global_symbol_table.set('TRUE', Number(1))
-global_symbol_table.set('FALSE', Number(0))
+global_symbol_table.set(NULL, Number(0))
+global_symbol_table.set(TRUE, Number(1))
+global_symbol_table.set(FALSE, Number(0))
 
 
 def run(fn, text):
     lexer = Lexer(fn, text)
-    tokens, error = lexer.make_tokens()
+    token_list, error = lexer.make_tokens()
     if error: return None, error
 
     # Generate AST
-    parser = Parser(tokens)
+    parser = Parser(token_list)
     ast = parser.parse()
     if ast.error: return None, ast.error
 
@@ -921,6 +925,7 @@ def run_ai(fn, text):
     parser = Parser(token_list)
     ast = parser.parse()
     if ast.error:
+        print(ast.error.as_string())
         ast_node = inference(token_list)
     else:
         ast_node = ast.node
