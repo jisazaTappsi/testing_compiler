@@ -225,7 +225,7 @@ def generate_program_expression(allowed_vars=None) -> str:
     return expr
 
 
-def generate_program_statements() -> list:
+def generate_program_statements(texts) -> list:
     """Generates a short program with valid statements. Each statement is either a variable declaration
     ('var x = expr') or a standalone expression. Expressions may use previously declared variables."""
     declared = []
@@ -233,16 +233,23 @@ def generate_program_statements() -> list:
     num_statements = random.randint(2, 5)
 
     for _ in range(num_statements):
-        if not declared or random.random() < 0.6:
-            # Variable declaration: var name = expr
-            name = _new_var_name(declared)
-            expr = generate_program_expression(allowed_vars=declared)
-            statements.append(f"{tokens.VAR} {name} = {expr}")
-            declared.append(name)
-        else:
-            # Standalone expression (can use declared variables)
-            expr = generate_program_expression(allowed_vars=declared)
-            statements.append(expr)
+        while True:
+            if not declared or random.random() < 0.6:
+                # Variable declaration: var name = expr
+                name = _new_var_name(declared)
+                expr = generate_program_expression(allowed_vars=declared)
+                text = f"{tokens.VAR} {name} = {expr}"
+                if text not in texts:
+                    declared.append(name)
+                    break
+            else:
+                # Standalone expression (can use declared variables)
+                text = generate_program_expression(allowed_vars=declared)
+                if text not in texts:
+                    break
+
+        texts.add(text)
+        statements.append(text)
 
     return statements
 
@@ -312,16 +319,11 @@ def generate():
             print(f"loaded: {(idx/num_samples)*100:.2f}%")
         #text = generate_arithmetic_expression()
         is_valid = True
-        statements = generate_program_statements()
+        statements = generate_program_statements(texts)
         symbol_table = basic.get_symbol_table()
         sample = Sample(statements, idx)
 
         for text in statements:
-            if text in texts:
-                invalid_count += 1
-                is_valid = False
-                break
-            texts.add(text)
 
             # Verify it can be lexed and parsed
             lexer = basic.Lexer('<stdin>', text)
@@ -368,8 +370,8 @@ def generate():
                     is_valid = False
                     break
 
-                lex_encoded = data.encode(lexer_text.replace(' ', ''), {})
-                ast_encoded = data.encode(ast_text.replace(' ', ''), {})
+                lex_encoded = data.encode(lexer_text, {})
+                ast_encoded = data.encode(ast_text, {})
                 if len(lex_encoded) <= block_size and len(ast_encoded) <= block_size:
                     sample.x_in.append(data.add_pad_tokens_and_trim(lex_encoded, block_size))
                     sample.x_out.append(data.add_pad_tokens_and_trim(ast_encoded, block_size))
