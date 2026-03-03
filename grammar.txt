@@ -11,7 +11,15 @@ term       : factor ((MUL|DIV) factor)*
 factor     : INT|FLOAT|IDENTIFIER
            : (PLUS|MINUS) factor
            : LPAREN expr RPAREN
+           : if-expr
+           : for-expr
+           : while-expr
 
 if-expr    : KEYWORD:IF expr KEYWORD:THEN expr
              (KEYWORD:ELIF KEYWORD:THEN expr)*
              (KEYWORD:ELSE expr)?
+
+for-expr   : KEYWORD:FOR IDENTIFIER EQ expr KEYWORD:TO expr
+             (KEYWORD:STEP expr)? KEYWORD:THEN expr
+
+while-expr : KEYWORD:WHILE expr KEYWORD:THEN expr

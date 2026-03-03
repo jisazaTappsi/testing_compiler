@@ -24,6 +24,10 @@ IF = 'if'
 THEN = 'then'
 ELIF = 'elif'
 ELSE = 'else'
+FOR = 'for'
+TO = 'to'
+STEP = 'step'
+WHILE = 'while'
 # Add new tokens here
 
 
@@ -61,6 +65,10 @@ TOKENS = [
     THEN,
     ELIF,
     ELSE,
+    FOR,
+    TO,
+    STEP,
+    WHILE,
     # Add new tokens here
 
     EOF,
@@ -77,6 +85,11 @@ KEYWORDS = [
     THEN,
     ELIF,
     ELSE,
+    FOR,
+    TO,
+    STEP,
+    WHILE,
+
 ]
 
 TOKEN_BASIC_IDS = {
