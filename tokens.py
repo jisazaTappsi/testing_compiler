@@ -28,6 +28,9 @@ FOR = 'for'
 TO = 'to'
 STEP = 'step'
 WHILE = 'while'
+COMMA = 'comma'
+ARROW = 'arrow'
+FUN = 'def'
 # Add new tokens here
 
 
@@ -69,6 +72,9 @@ TOKENS = [
     TO,
     STEP,
     WHILE,
+    COMMA,
+    ARROW,
+    FUN,
     # Add new tokens here
 
     EOF,
@@ -89,7 +95,7 @@ KEYWORDS = [
     TO,
     STEP,
     WHILE,
-
+    FUN,
 ]
 
 TOKEN_BASIC_IDS = {

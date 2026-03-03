@@ -10,14 +10,15 @@ def test_lexing_float_plus_int():
 
     assert error is None
 
-    # Should produce 3 tokens: FLOAT, PLUS, INT, EOF
-    assert len(tokens) == 4
-    assert tokens[0].type == basic.FLOAT
-    assert tokens[0].value == 3.4
-    assert tokens[1].type == basic.PLUS
-    assert tokens[2].type == basic.INT
-    assert tokens[2].value == 2
-    assert tokens[3].type == EOF
+    # Should produce SOF, FLOAT, PLUS, INT, EOF
+    assert len(tokens) == 5
+    assert tokens[0].type == basic.SOF
+    assert tokens[1].type == basic.FLOAT
+    assert tokens[1].value == 3.4
+    assert tokens[2].type == basic.PLUS
+    assert tokens[3].type == basic.INT
+    assert tokens[3].value == 2
+    assert tokens[4].type == EOF
 
 
 def test_lexing_float_multiply_float():
@@ -27,14 +28,15 @@ def test_lexing_float_multiply_float():
 
     assert error is None
 
-    # Should produce 3 tokens: FLOAT, MUL, FLOAT, EOF
-    assert len(tokens) == 4
-    assert tokens[0].type == basic.FLOAT
-    assert tokens[0].value == 2.5
-    assert tokens[1].type == basic.MUL
-    assert tokens[2].type == basic.FLOAT
-    assert tokens[2].value == 2.5
-    assert tokens[3].type == EOF
+    # Should produce SOF, FLOAT, MUL, FLOAT, EOF
+    assert len(tokens) == 5
+    assert tokens[0].type == basic.SOF
+    assert tokens[1].type == basic.FLOAT
+    assert tokens[1].value == 2.5
+    assert tokens[2].type == basic.MUL
+    assert tokens[3].type == basic.FLOAT
+    assert tokens[3].value == 2.5
+    assert tokens[4].type == EOF
 
 
 def test_lexing_int_plus_int():
@@ -44,25 +46,29 @@ def test_lexing_int_plus_int():
 
     assert error is None
 
-    # Should produce 3 tokens: INT, PLUS, INT, EOF
-    assert len(tokens) == 4
-    assert tokens[0].type == basic.INT
-    assert tokens[0].value == 1
-    assert tokens[1].type == basic.PLUS
-    assert tokens[2].type == basic.INT
-    assert tokens[2].value == 2
-    assert tokens[3].type == EOF
+    # Should produce SOF, INT, PLUS, INT, EOF
+    assert len(tokens) == 5
+    assert tokens[0].type == basic.SOF
+    assert tokens[1].type == basic.INT
+    assert tokens[1].value == 1
+    assert tokens[2].type == basic.PLUS
+    assert tokens[3].type == basic.INT
+    assert tokens[3].value == 2
+    assert tokens[4].type == EOF
 
 
 def test_lexing_illegal_char():
-    """Test lexing the input '1 + d' should raise IllegalError"""
+    """Test lexing the input '1 + d' where 'd' is now a valid identifier"""
     lexer = basic.Lexer('<stdin>', "1 + d")
     tokens, error = lexer.make_tokens()
 
-    assert error is not None
-    assert isinstance(error, basic.IllegalError)
-    assert error.error_name == 'Illegal Character'
-    assert tokens == []
+    assert error is None
+    assert len(tokens) == 5
+    assert tokens[0].type == basic.SOF
+    assert tokens[1].type == basic.INT
+    assert tokens[2].type == basic.PLUS
+    assert tokens[3].type == basic.IDENTIFIER
+    assert tokens[4].type == EOF
 
 
 def test_parsing_syntax_error_missing_operand():
@@ -85,134 +91,118 @@ def test_parsing_comprehensive_valid_ast():
     # This tests: addition, multiplication, subtraction, division
     # with both integers and floats, and proper operator precedence
     # Expected AST structure: (10 + (2.5 * 3)) - (4.2 / 2)
-    ast, error = basic.run('<stdin>', "10 + 2.5 * 3 - 4.2 / 2")
+    value, error = basic.run('<stdin>', "10 + 2.5 * 3 - 4.2 / 2")
     
     assert error is None
-    assert ast is not None
-    
-    # Verify it's a BinOpNode (subtraction at the top level due to left associativity)
-    assert isinstance(ast, basic.BinOpNode)
-    assert ast.op_tok.type == basic.MINUS
-    
-    # Left side should be addition: 10 + (2.5 * 3)
-    assert isinstance(ast.left_node, basic.BinOpNode)
-    assert ast.left_node.op_tok.type == basic.PLUS
-    
-    # Right side should be division: 4.2 / 2
-    assert isinstance(ast.right_node, basic.BinOpNode)
-    assert ast.right_node.op_tok.type == basic.DIV
-    
-    # Verify addition's left side: 10 (int)
-    assert isinstance(ast.left_node.left_node, basic.NumberNode)
-    assert ast.left_node.left_node.tok.type == basic.INT
-    assert ast.left_node.left_node.tok.value == 10
-    
-    # Verify addition's right side is multiplication: 2.5 * 3
-    assert isinstance(ast.left_node.right_node, basic.BinOpNode)
-    assert ast.left_node.right_node.op_tok.type == basic.MUL
-    
-    # Verify multiplication operands: 2.5 (float) * 3 (int)
-    assert isinstance(ast.left_node.right_node.left_node, basic.NumberNode)
-    assert ast.left_node.right_node.left_node.tok.type == basic.FLOAT
-    assert ast.left_node.right_node.left_node.tok.value == 2.5
-    
-    assert isinstance(ast.left_node.right_node.right_node, basic.NumberNode)
-    assert ast.left_node.right_node.right_node.tok.type == basic.INT
-    assert ast.left_node.right_node.right_node.tok.value == 3
-    
-    # Verify division operands: 4.2 (float) / 2 (int)
-    assert isinstance(ast.right_node.left_node, basic.NumberNode)
-    assert ast.right_node.left_node.tok.type == basic.FLOAT
-    assert ast.right_node.left_node.tok.value == 4.2
-    
-    assert isinstance(ast.right_node.right_node, basic.NumberNode)
-    assert ast.right_node.right_node.tok.type == basic.INT
-    assert ast.right_node.right_node.tok.value == 2
+    assert isinstance(value, basic.Number)
 
 
 def test_parsing_unary_minus():
     """Test parsing unary minus operator: -5"""
-    ast, error = basic.run('<stdin>', "-5")
+    value, error = basic.run('<stdin>', "-5")
     
     assert error is None
-    assert ast is not None
-    
-    # Verify it's a UnaryOpNode
-    assert isinstance(ast, basic.UnaryOpNode)
-    assert ast.op_tok.type == basic.MINUS
-    
-    # Verify the node inside is a NumberNode with value 5
-    assert isinstance(ast.node, basic.NumberNode)
-    assert ast.node.tok.type == basic.INT
-    assert ast.node.tok.value == 5
+    assert isinstance(value, basic.Number)
+    assert value.value == -5
 
 
 def test_parsing_unary_plus():
     """Test parsing unary plus operator: +3.5"""
-    ast, error = basic.run('<stdin>', "+3.5")
+    value, error = basic.run('<stdin>', "+3.5")
     
     assert error is None
-    assert ast is not None
-    
-    # Verify it's a UnaryOpNode
-    assert isinstance(ast, basic.UnaryOpNode)
-    assert ast.op_tok.type == basic.PLUS
-    
-    # Verify the node inside is a NumberNode with value 3.5
-    assert isinstance(ast.node, basic.NumberNode)
-    assert ast.node.tok.type == basic.FLOAT
-    assert ast.node.tok.value == 3.5
+    assert isinstance(value, basic.Number)
+    assert value.value == 3.5
 
 
 def test_parsing_parentheses():
     """Test parsing parentheses for grouping: (1 + 2) * 3"""
-    ast, error = basic.run('<stdin>', "(1 + 2) * 3")
+    value, error = basic.run('<stdin>', "(1 + 2) * 3")
     
     assert error is None
-    assert ast is not None
-    
-    # Verify it's a BinOpNode (multiplication at top level)
-    assert isinstance(ast, basic.BinOpNode)
-    assert ast.op_tok.type == basic.MUL
-    
-    # Left side should be addition: (1 + 2)
-    assert isinstance(ast.left_node, basic.BinOpNode)
-    assert ast.left_node.op_tok.type == basic.PLUS
-    
-    # Verify addition operands: 1 + 2
-    assert isinstance(ast.left_node.left_node, basic.NumberNode)
-    assert ast.left_node.left_node.tok.value == 1
-    assert isinstance(ast.left_node.right_node, basic.NumberNode)
-    assert ast.left_node.right_node.tok.value == 2
-    
-    # Right side should be 3
-    assert isinstance(ast.right_node, basic.NumberNode)
-    assert ast.right_node.tok.value == 3
+    assert isinstance(value, basic.Number)
+    assert value.value == 9
 
 
 def test_parsing_unary_with_parentheses():
     """Test parsing unary operator with parentheses: -(1 + 2)"""
-    ast, error = basic.run('<stdin>', "-(1 + 2)")
+    value, error = basic.run('<stdin>', "-(1 + 2)")
 
     assert error is None
-    assert ast is not None
-
-    # Verify it's a UnaryOpNode
-    assert isinstance(ast, basic.UnaryOpNode)
-    assert ast.op_tok.type == basic.MINUS
-
-    # The node inside should be a BinOpNode (addition)
-    assert isinstance(ast.node, basic.BinOpNode)
-    assert ast.node.op_tok.type == basic.PLUS
-
-    # Verify addition operands: 1 + 2
-    assert isinstance(ast.node.left_node, basic.NumberNode)
-    assert ast.node.left_node.tok.value == 1
-    assert isinstance(ast.node.right_node, basic.NumberNode)
-    assert ast.node.right_node.tok.value == 2
+    assert isinstance(value, basic.Number)
+    assert value.value == -3
 
 
 def test_stupidly_simple_not():
     ast, error = basic.run('<stdin>', f"{tokens.NOT} {tokens.TRUE} == {tokens.NULL}")
     assert error is None
 
+
+def test_function_def_and_calls():
+    # def f(a,b) -> a+b
+    value, error = basic.run('<stdin>', "def f(a, b) -> a + b")
+    assert error is None
+    assert isinstance(value, basic.Function)
+    assert value.name == "f"
+
+    # f(8,9)
+    value, error = basic.run('<stdin>', "f(8,9)")
+    assert error is None
+    assert isinstance(value, basic.Number)
+    assert value.value == 17
+
+    # f()
+    value, error = basic.run('<stdin>', "f()")
+    assert error is not None
+    assert isinstance(error, basic.RTError)
+
+    # f(3,4,5)
+    value, error = basic.run('<stdin>', "f(3,4,5)")
+    assert error is not None
+    assert isinstance(error, basic.RTError)
+
+    # var func = f
+    value, error = basic.run('<stdin>', "var func = f")
+    assert error is None
+    assert isinstance(value, basic.Function)
+    assert value.name == "f"
+
+    # func
+    value, error = basic.run('<stdin>', "func")
+    assert error is None
+    assert isinstance(value, basic.Function)
+    assert value.name == "f"
+
+    # func(2,3)
+    value, error = basic.run('<stdin>', "func(2,3)")
+    assert error is None
+    assert isinstance(value, basic.Number)
+    assert value.value == 5
+
+    # def (a, b) -> a + b
+    value, error = basic.run('<stdin>', "def (a, b) -> a + b")
+    assert error is None
+    assert isinstance(value, basic.Function)
+    assert value.name == "<anonymous>"
+
+    # var ano = def (a, b) -> a + b
+    value, error = basic.run('<stdin>', "var ano = def (a, b) -> a + b")
+    assert error is None
+    assert isinstance(value, basic.Function)
+
+    # ano(3,3)
+    value, error = basic.run('<stdin>', "ano(3,3)")
+    assert error is None
+    assert isinstance(value, basic.Number)
+    assert value.value == 6
+
+    # def zero(a) -> a/0
+    value, error = basic.run('<stdin>', "def zero(a) -> a/0")
+    assert error is None
+    assert isinstance(value, basic.Function)
+    assert value.name == "zero"
+
+    # zero(9)
+    value, error = basic.run('<stdin>', "zero(9)")
+    assert error is not None
+    assert isinstance(error, basic.RTError)
