@@ -18,8 +18,8 @@ if introduce_error:
     code_model_name = 'model_error.pth'
     dataset_name = 'dataset_error.pkl'
 else:
-    code_model_name = 'code_model_vars.pth'
-    dataset_name = 'dataset_vars.pkl'
+    code_model_name = 'code_model_if.pth'
+    dataset_name = 'dataset_if.pkl'
 
 
 if torch.cuda.is_available():

@@ -20,6 +20,10 @@ AND = 'and'
 OR = 'or'
 NOT = 'not'
 VAR = 'var'
+IF = 'if'
+THEN = 'then'
+ELIF = 'elif'
+ELSE = 'else'
 # Add new tokens here
 
 
@@ -53,6 +57,10 @@ TOKENS = [
     OR,
     NOT,
     VAR,
+    IF,
+    THEN,
+    ELIF,
+    ELSE,
     # Add new tokens here
 
     EOF,
@@ -65,6 +73,10 @@ KEYWORDS = [
     AND,
     OR,
     NOT,
+    IF,
+    THEN,
+    ELIF,
+    ELSE,
 ]
 
 TOKEN_BASIC_IDS = {
