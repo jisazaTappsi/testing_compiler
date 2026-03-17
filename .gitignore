@@ -215,3 +215,6 @@ __marimo__/
 dataset*
 merges_*.json
 *.pth
+
+frontend/.nuxt
+frontend/node_modules

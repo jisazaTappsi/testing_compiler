@@ -254,42 +254,6 @@ def generate_program_statements(texts) -> list:
     return statements
 
 
-
-def introduce_random_error(text):
-    """
-    Introduce a random error to a string.
-    Errors can be: character substitution, deletion, insertion, or swap.
-    """
-    if len(text) == 0:
-        return text
-
-    #error_type = random.choice(['substitute', 'delete', 'insert', 'swap'])
-    # IN arithmetic only inserting a non-arithmetic char makes sense, as any other operation would change the
-    # meaning of the program itself
-    error_type = random.choice(['insert', ])
-    text_list = list(text)
-
-    if error_type == 'substitute':
-        # Substitute a random character
-        idx = random.randint(0, len(text_list) - 1)
-        # Replace with a random printable character
-        text_list[idx] = random.choice(basic.LETTERS)
-    elif error_type == 'delete':
-        # Delete a random character
-        idx = random.randint(0, len(text_list) - 1)
-        text_list.pop(idx)
-    elif error_type == 'insert':
-        # Insert a random character at a random position
-        idx = random.randint(0, len(text_list))
-        text_list.insert(idx, random.choice(basic.LETTERS))
-    elif error_type == 'swap' and len(text_list) > 1:
-        # Swap two adjacent characters
-        idx = random.randint(0, len(text_list) - 2)
-        text_list[idx], text_list[idx + 1] = text_list[idx + 1], text_list[idx]
-    
-    return ''.join(text_list)
-
-
 class Sample:
     lexer_text: str
     ast_text: str
