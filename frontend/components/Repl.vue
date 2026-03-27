@@ -1,15 +1,25 @@
 <script setup lang="ts">
 import { ref, nextTick, onMounted } from 'vue'
+import axios from 'axios'
+
+type InterpretResponse = {
+  result: string
+  error: string | null
+  symbols?: Record<string, unknown> | null
+}
 
 type HistoryEntry = {
   type: 'input' | 'output' | 'error'
   text: string
+  symbol_table?: string | null
 }
 
 const history = ref<HistoryEntry[]>([
-  { type: 'output', text: 'Welcome to the REPL. Type code and press Enter.' },
+  { type: 'output', text: 'FluidLang runs a Transformer interpreter: type code with arbitrary syntax it will just figure it out :).'}, {type: 'output', text: 'Type with JS syntax "var my_var=12" or "my_var=12" with Python syntax and it will interpret both correctly' },
   { type: 'output', text: 'Type "clear" to reset.' },
 ])
+
+let symbols: Record<string, unknown> | null = null
 const input = ref('')
 const loading = ref(false)
 const inputEl = ref<HTMLInputElement | null>(null)
@@ -40,18 +50,25 @@ async function submit() {
   await scrollToBottom()
 
   try {
-    const data = await $fetch<{ result: string; error: string | null }>('/api/interpret', {
-      method: 'POST',
-      body: { code },
-    })
+    const { data } = await axios.post<InterpretResponse>('/api/interpret', { code, symbols })
 
     if (data.error) {
       history.value.push({ type: 'error', text: data.error })
     } else {
       history.value.push({ type: 'output', text: data.result })
     }
-  } catch (err: any) {
-    history.value.push({ type: 'error', text: err?.message ?? 'Request failed' })
+    symbols = data.symbols ?? null
+
+  } catch (err: unknown) {
+    const message =
+      axios.isAxiosError(err) && err.response?.data
+        ? typeof err.response.data === 'string'
+          ? err.response.data
+          : JSON.stringify(err.response.data)
+        : err instanceof Error
+          ? err.message
+          : 'Request failed'
+    history.value.push({ type: 'error', text: message })
   } finally {
     loading.value = false
     await scrollToBottom()

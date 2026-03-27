@@ -1020,6 +1020,9 @@ class Value:
         self.context = context
         return self
 
+    def to_json(self):
+        return {"type": type(self).__name__.lower(), "value": repr(self)}
+
     def added_to(self, other):
         return None, self.illegal_operation(other)
 
@@ -1165,6 +1168,9 @@ class Number(Value):
     def is_true(self):
         return self.value != 0
 
+    def to_json(self):
+        return {"type": "number", "value": self.value}
+
     def __repr__(self):
         return str(self.value)
 
@@ -1205,6 +1211,9 @@ class Function(Value):
         copy.set_pos(self.pos_start, self.pos_end)
         return copy
 
+    def to_json(self):
+        return {"type": "function", "name": self.name, "args": self.arg_names}
+
     def __repr__(self):
         return f"<function {self.name}>"
 
@@ -1241,6 +1250,21 @@ class SymbolTable:
 
     def remove(self, name):
         del self.symbols[name]
+
+    def to_json(self):
+        if self.symbols:
+            return {name: val.to_json() for name, val in self.symbols.items()}
+        else:
+            return None
+
+    @staticmethod
+    def from_json(symbols):
+        if symbols:
+            table = SymbolTable()
+            table.symbols = {name: val.from_json() for name, val in symbols.items()}
+            return table
+        else:
+            return None
 
 
 ########################
@@ -1501,7 +1525,7 @@ def inference(token_list):
     return ast_node
 
 
-def run_ai(fn, text):
+def run_ai(fn, text, symbol_table=None):
     lexer = Lexer(fn, text)
     token_list, error = lexer.make_tokens()
     if error: return None, error
@@ -1519,7 +1543,7 @@ def run_ai(fn, text):
     # Run
     interpreter = Interpreter()
     context = Context('<program>')
-    context.symbol_table = global_symbol_table
+    context.symbol_table = symbol_table if symbol_table else global_symbol_table
     res = interpreter.visit(ast_node, context)
 
-    return res.value, res.error
+    return res.value, res.error, context.symbol_table
