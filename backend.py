@@ -40,12 +40,12 @@ class InterpretRequest(BaseModel):
 @app.post("/interpret")
 def interpret(req: InterpretRequest)-> Dict:
     symbol_table = basic.SymbolTable.from_json(req.symbols)
-    value, error, symbol_table = basic.run_ai("<stdin>", req.code, symbol_table=symbol_table)
-    if error:
-        return {"result": None, "symbol_table": None, "error": error.as_string()}
+    res, context = basic.run_ai("<stdin>", req.code, symbol_table=symbol_table)
+    if res.error:
+        return {"result": None, "symbol_table": None, "error": res.error.as_string()}
 
     return {
-        "result": str(value) if value is not None else "",
-        "symbols": symbol_table.to_json(),
+        "result": str(res.value) if res.value is not None else "",
+        "symbols": context.symbol_table.to_json(),
         "error": None,
     }

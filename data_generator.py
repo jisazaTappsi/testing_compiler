@@ -1,4 +1,5 @@
 import math
+import re
 import random
 from typing import Optional
 
@@ -25,8 +26,8 @@ def log_scale_int(low: int, high: int, base: float = math.e) -> int:
 
 def int_part():
     # TODO: tests proposed
-    #return 0 if random.random() < 0.0 else log_scale_int(1, 2**31, base=10)
-    return 0 if random.random() < 0 else log_scale_int(1, 9999)
+    #return 0 if random.random() < 0.1 else log_scale_int(1, 2**31, base=10)
+    return 0 if random.random() < 0.1 else log_scale_int(1, 9999)
 
 
 def generate_number():
@@ -146,7 +147,7 @@ def generate_arithmetic_expression(use_variables=False, allowed_vars=None):
 
 
 # Variable names: letters only, no digits. Exclude names that are keywords.
-_VAR_NAME_LETTERS = 'abcdefghijklmnopqrstuwxyz'  # single letters (no 'v' to avoid 'var')
+_VAR_NAME_LETTERS = 'abcdefghijklmnopqrstuvwxyz'  # single letters (no 'v' to avoid 'var')
 
 
 def _new_var_name(declared: list) -> str:
@@ -254,13 +255,88 @@ def generate_program_statements(texts) -> list:
     return statements
 
 
+# ---------------------------------------------------------------------------
+# Function call -> body AST samples
+# ---------------------------------------------------------------------------
+FUNC_TEMPLATES = [
+    ("sum", ["a", "b"], "a+b"),
+    ("sub", ["a", "b"], "a-b"),
+    ("mul", ["a", "b"], "a*b"),
+    ("add", ["x", "y"], "x+y"),
+    ("diff", ["x", "y"], "x-y"),
+    ("prod", ["x", "y"], "x*y"),
+    ("double", ["x"], "x+x"),
+    ("square", ["x"], "x*x"),
+    ("negate", ["x"], "-x"),
+    ("triple", ["n"], "n+n+n"),
+    ("add3", ["a", "b", "c"], "a+b+c"),
+    ("mul3", ["a", "b", "c"], "a*b*c"),
+    ("avg", ["a", "b"], "(a+b)/2"),
+    ("dist", ["a", "b"], "a-b"),
+    ("sumsq", ["a", "b"], "a*a+b*b"),
+    ("combo", ["a", "b"], "a*b+a+b"),
+    ("scale", ["x", "f"], "x*f"),
+    ("halve", ["x"], "x/2"),
+    ("inc", ["n"], "n+1"),
+    ("dec", ["n"], "n-1"),
+]
+
+FUNC_CALL_RATIO = 0.10  # 10% of samples will be function-call samples
+
+
+def _substitute_params(body, params, args):
+    """Replace parameter names in body with concrete argument values (whole-word)."""
+    result = body
+    for param, arg in zip(params, args):
+        result = re.sub(rf'\b{re.escape(param)}\b', arg, result)
+    return result
+
+
+def generate_func_call_sample():
+    """Generate a single (call_lex, body_ast) pair with random args.
+    Returns (lex_text, ast_text, x_in, x_out) or Nones on failure."""
+    name, params, body = random.choice(FUNC_TEMPLATES)
+    args = [generate_number() for _ in params]
+
+    call_text = f"{name}({', '.join(args)})"
+    body_text = _substitute_params(body, params, args)
+
+    # Lex the call (model input)
+    lexer_call = basic.Lexer('<stdin>', call_text)
+    call_tokens, error = lexer_call.make_tokens()
+    if error:
+        return None, None, None, None, None
+    lex_text = ' '.join(t.__repr__() for t in call_tokens)
+
+    # Parse the substituted body (model target)
+    lexer_body = basic.Lexer('<stdin>', body_text)
+    body_tokens, error = lexer_body.make_tokens()
+    if error:
+        return None, None, None, None, None
+
+    parser = basic.Parser(body_tokens)
+    ast = parser.parse()
+    if ast.error:
+        return None, None, None, None, None
+    ast_text = f'{tokens.SOF} {ast.node} {tokens.EOF}'
+
+    lex_encoded = data.encode(lex_text, {})
+    ast_encoded = data.encode(ast_text, {})
+    if len(lex_encoded) > block_size or len(ast_encoded) > block_size:
+        return None, None, None, None, None
+
+    x_in = data.add_pad_tokens_and_trim(lex_encoded, block_size)
+    x_out = data.add_pad_tokens_and_trim(ast_encoded, block_size)
+    return call_text, lex_text, ast_text, x_in, x_out
+
+
 class Sample:
     lexer_text: str
     ast_text: str
     text: str
     x_in: list
     x_out: list
-    symbols: dict = {'_output_list': []}
+    symbols: dict
     id: Optional[int]
 
     def __init__(self, statements, idx):
@@ -269,7 +345,7 @@ class Sample:
         self.text = '\n'.join(statements)
         self.x_in = []
         self.x_out = []
-        self.symbols['_output_list'] = []
+        self.symbols = {'_output_list': []}
         self.id = idx
 
 
@@ -278,10 +354,32 @@ def generate():
     rows = []
     texts = set()
 
+    func_call_count = 0
+
     for idx in range(num_samples):
         if idx % 1_000 == 0:
             print(f"loaded: {(idx/num_samples)*100:.2f}%")
-        #text = generate_arithmetic_expression()
+
+        # --- Function-call sample branch ---
+        if random.random() < FUNC_CALL_RATIO:
+            call_text, lex_text, ast_text, x_in, x_out = generate_func_call_sample()
+            if call_text is None:
+                invalid_count += 1
+                continue
+            row = {
+                'lexer_text': f'\n{lex_text}',
+                'ast_text': f'\n{ast_text}',
+                'text': call_text,
+                'x_in': [x_in],
+                'x_out': [x_out],
+                'symbols': {'_output_list': []},
+                'id': idx,
+            }
+            rows.append(row)
+            func_call_count += 1
+            continue
+
+        # --- Regular program sample branch ---
         is_valid = True
         statements = generate_program_statements(texts)
         symbol_table = basic.get_symbol_table()
@@ -361,7 +459,7 @@ def generate():
     samples_df.to_pickle(dataset_name)  # Save dataset as a Pandas DataFrame (pickled)
 
     valid_count = len(samples_df)
-    print(f"\nValid: {valid_count}, Invalid: {invalid_count}, Success rate: {valid_count/num_samples*100:.1f}%")
+    print(f"\nValid: {valid_count}, Invalid: {invalid_count}, Func calls: {func_call_count}, Success rate: {valid_count/num_samples*100:.1f}%")
 
 
 if __name__ == '__main__':

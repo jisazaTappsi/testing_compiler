@@ -366,6 +366,11 @@ class FuncDefNode:
 
         self.pos_end = self.body_node.pos_end
 
+    def __repr__(self):
+        args = ' '.join(str(t) for t in self.arg_name_toks)
+        name = self.var_name_tok if self.var_name_tok else ''
+        return f'({FUN} {name}({args}) -> {self.body_node})'
+
 
 class CallNode:
     def __init__(self, node_to_call, arg_nodes):
@@ -378,6 +383,10 @@ class CallNode:
             self.pos_end = self.arg_nodes[len(self.arg_nodes)-1].pos_end
         else:
             self.pos_end = self.node_to_call.pos_end
+
+    def __repr__(self):
+        args = ' '.join(str(a) for a in self.arg_nodes)
+        return f'({self.node_to_call}({args}))'
 
 
 ########################
@@ -1525,25 +1534,31 @@ def inference(token_list):
     return ast_node
 
 
+def run_interpreter(symbol_table, ast_node):
+    interpreter = Interpreter()
+    context = Context('<program>')
+    context.symbol_table = symbol_table if symbol_table else global_symbol_table
+    return interpreter.visit(ast_node, context), context
+
+
 def run_ai(fn, text, symbol_table=None):
     lexer = Lexer(fn, text)
     token_list, error = lexer.make_tokens()
-    if error: return None, error
+    if error:
+        context = Context('<program>')
+        context.symbol_table = symbol_table
+        return RTResult().failure(error), context
 
     # Generate AST
     parser = Parser(token_list)
     ast = parser.parse()
-    if ast.error:
-        print(ast.error.as_string())
-        print('using AI')
+    if ast.error:  # Uses AI if the base interpreter fails.
         ast_node = inference(token_list)
+        return run_interpreter(symbol_table, ast_node)
     else:
-        ast_node = ast.node
+        res, context = run_interpreter(symbol_table, ast.node)
+        if res.error:   # Try again and use AI.
+            ast_node = inference(token_list)
+            return run_interpreter(symbol_table, ast_node)
 
-    # Run
-    interpreter = Interpreter()
-    context = Context('<program>')
-    context.symbol_table = symbol_table if symbol_table else global_symbol_table
-    res = interpreter.visit(ast_node, context)
-
-    return res.value, res.error, context.symbol_table
+        return res, context

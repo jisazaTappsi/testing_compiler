@@ -2,6 +2,6 @@ import basic
 
 while True:
     text = input('basic > ')
-    result, error, _ = basic.run_ai('<stdin>', text)
-    if error: print(error.as_string())
-    elif result: print(result)
+    result, _ = basic.run_ai('<stdin>', text)
+    if result.error: print(result.error.as_string())
+    elif result.value: print(result.value)
