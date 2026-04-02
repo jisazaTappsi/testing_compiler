@@ -1541,7 +1541,7 @@ def run_interpreter(symbol_table, ast_node):
     return interpreter.visit(ast_node, context), context
 
 
-def run_ai(fn, text, symbol_table=None):
+def run_ai(fn, text, symbol_table=None, force_ai=False):
     lexer = Lexer(fn, text)
     token_list, error = lexer.make_tokens()
     if error:
@@ -1552,7 +1552,7 @@ def run_ai(fn, text, symbol_table=None):
     # Generate AST
     parser = Parser(token_list)
     ast = parser.parse()
-    if ast.error:  # Uses AI if the base interpreter fails.
+    if force_ai or ast.error:  # Uses AI if the base interpreter fails.
         ast_node = inference(token_list)
         return run_interpreter(symbol_table, ast_node)
     else:

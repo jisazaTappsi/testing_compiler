@@ -175,14 +175,12 @@ def _new_var_name(declared: list) -> str:
 BOOLEAN_LITERALS = [tokens.NULL, tokens.TRUE, tokens.FALSE]
 
 
-def generate_program_expression(allowed_vars=None) -> str:
+def generate_program_expression(allowed_vars) -> str:
     """
     Generate an expression compatible with the full grammar, including
     arithmetic, comparison operators, logical AND/OR, and the identifiers
     True, False and null.
     """
-    if allowed_vars is None:
-        allowed_vars = []
 
     idents = list(allowed_vars) + BOOLEAN_LITERALS
     use_vars = bool(idents)
@@ -238,14 +236,14 @@ def generate_program_statements(texts) -> list:
             if not declared or random.random() < 0.6:
                 # Variable declaration: var name = expr
                 name = _new_var_name(declared)
-                expr = generate_program_expression(allowed_vars=declared)
+                expr = generate_program_expression(declared)
                 text = f"{tokens.VAR} {name} = {expr}"
                 if text not in texts:
                     declared.append(name)
                     break
             else:
                 # Standalone expression (can use declared variables)
-                text = generate_program_expression(allowed_vars=declared)
+                text = generate_program_expression(declared)
                 if text not in texts:
                     break
 
@@ -280,8 +278,6 @@ FUNC_TEMPLATES = [
     ("inc", ["n"], "n+1"),
     ("dec", ["n"], "n-1"),
 ]
-
-FUNC_CALL_RATIO = 0.10  # 10% of samples will be function-call samples
 
 
 def _substitute_params(body, params, args):
@@ -356,6 +352,11 @@ class Sample:
         self.symbols = {'_output_list': []}
         self.id = idx
 
+def print_program(statements):
+    print('\n\nProgram sample:')
+    print(f'\n'.join(statements))
+    print('----------------------------------\n\n')
+
 
 def generate():
     invalid_count = 0
@@ -365,9 +366,7 @@ def generate():
     func_call_count = 0
 
     for idx in range(num_samples):
-        if idx % 1_000 == 0:
-            print(f"loaded: {(idx/num_samples)*100:.2f}%")
-
+        """
         if random.random() < FUNC_CALL_RATIO:
             row = generate_func_call_sample(idx)
             if row is None:
@@ -376,11 +375,16 @@ def generate():
             rows.append(row)
             func_call_count += 1
             continue
+        """
 
         is_valid = True
         statements = generate_program_statements(texts)
         symbol_table = basic.get_symbol_table()
         sample = Sample(statements, idx)
+
+        if idx % 1_000 == 0:
+            print_program(statements)
+            print(f"loaded: {(idx/num_samples)*100:.2f}%")
 
         for text in statements:
 
