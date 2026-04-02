@@ -1,3 +1,4 @@
+import copy
 import math
 import re
 import random
@@ -125,23 +126,21 @@ def generate_expr(depth=0, max_depth=5, allowed_vars=None):
     return result
 
 
-def generate_arithmetic_expression(use_variables=False, allowed_vars=None):
+def generate_arithmetic_expression(allowed_vars):
     """
     Generate a valid arithmetic expression that can be parsed.
     Optionally limit the length of the generated expression.
-    When use_variables is True, factors may be identifiers from allowed_vars (list of variable names).
     """
     max_length = block_size
-    vars_list = list(allowed_vars) if use_variables and allowed_vars else []
 
     # Start with a reasonable max_depth based on block_size. Deeper expressions tend to be longer.
     max_depth = 2
-    expr = generate_expr(depth=0, max_depth=max_depth, allowed_vars=vars_list)
+    expr = generate_expr(depth=0, max_depth=max_depth, allowed_vars=allowed_vars)
 
     # If expression is too long, regenerate with lower max_depth (stricter cap leaves headroom for comparisons/logic encoding)
     while len(expr) > max_length//10:
         max_depth = max(1, max_depth - 1)
-        expr = generate_expr(depth=0, max_depth=max_depth, allowed_vars=vars_list)
+        expr = generate_expr(depth=0, max_depth=max_depth, allowed_vars=allowed_vars)
 
     return expr
 
@@ -181,12 +180,8 @@ def generate_program_expression(allowed_vars) -> str:
     arithmetic, comparison operators, logical AND/OR, and the identifiers
     True, False and null.
     """
-
-    idents = list(allowed_vars) + BOOLEAN_LITERALS
-    use_vars = bool(idents)
-
     def gen_arith():
-        return generate_arithmetic_expression(use_variables=use_vars, allowed_vars=idents)
+        return generate_arithmetic_expression(allowed_vars)
 
     # Start from either a boolean-like identifier or a plain arithmetic expression
     if random.random() < 0.3:
@@ -227,7 +222,7 @@ def generate_program_expression(allowed_vars) -> str:
 def generate_program_statements(texts) -> list:
     """Generates a short program with valid statements. Each statement is either a variable declaration
     ('var x = expr') or a standalone expression. Expressions may use previously declared variables."""
-    declared = []
+    declared = copy.copy(BOOLEAN_LITERALS)
     statements = []
     num_statements = random.randint(2, 5)
 
@@ -352,6 +347,7 @@ class Sample:
         self.symbols = {'_output_list': []}
         self.id = idx
 
+
 def print_program(statements):
     print('\n\nProgram sample:')
     print(f'\n'.join(statements))
@@ -387,8 +383,6 @@ def generate():
             print(f"loaded: {(idx/num_samples)*100:.2f}%")
 
         for text in statements:
-
-            # Verify it can be lexed and parsed
             lexer = basic.Lexer('<stdin>', text)
             try:
                 token_list, error = lexer.make_tokens()
