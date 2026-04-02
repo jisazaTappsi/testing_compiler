@@ -292,7 +292,7 @@ def _substitute_params(body, params, args):
     return result
 
 
-def generate_func_call_sample():
+def generate_func_call_sample(idx):
     """Generate a single (call_lex, body_ast) pair with random args.
     Returns (lex_text, ast_text, x_in, x_out) or Nones on failure."""
     name, params, body = random.choice(FUNC_TEMPLATES)
@@ -305,29 +305,37 @@ def generate_func_call_sample():
     lexer_call = basic.Lexer('<stdin>', call_text)
     call_tokens, error = lexer_call.make_tokens()
     if error:
-        return None, None, None, None, None
+        return None
     lex_text = ' '.join(t.__repr__() for t in call_tokens)
 
     # Parse the substituted body (model target)
     lexer_body = basic.Lexer('<stdin>', body_text)
     body_tokens, error = lexer_body.make_tokens()
     if error:
-        return None, None, None, None, None
+        return None
 
     parser = basic.Parser(body_tokens)
     ast = parser.parse()
     if ast.error:
-        return None, None, None, None, None
+        return None
     ast_text = f'{tokens.SOF} {ast.node} {tokens.EOF}'
 
     lex_encoded = data.encode(lex_text, {})
     ast_encoded = data.encode(ast_text, {})
     if len(lex_encoded) > block_size or len(ast_encoded) > block_size:
-        return None, None, None, None, None
+        return None
 
     x_in = data.add_pad_tokens_and_trim(lex_encoded, block_size)
     x_out = data.add_pad_tokens_and_trim(ast_encoded, block_size)
-    return call_text, lex_text, ast_text, x_in, x_out
+    return {
+        'lexer_text': f'\n{lex_text}',
+        'ast_text': f'\n{ast_text}',
+        'text': call_text,
+        'x_in': [x_in],
+        'x_out': [x_out],
+        'symbols': {'_output_list': []},
+        'id': idx,
+    }
 
 
 class Sample:
@@ -360,26 +368,15 @@ def generate():
         if idx % 1_000 == 0:
             print(f"loaded: {(idx/num_samples)*100:.2f}%")
 
-        # --- Function-call sample branch ---
         if random.random() < FUNC_CALL_RATIO:
-            call_text, lex_text, ast_text, x_in, x_out = generate_func_call_sample()
-            if call_text is None:
+            row = generate_func_call_sample(idx)
+            if row is None:
                 invalid_count += 1
                 continue
-            row = {
-                'lexer_text': f'\n{lex_text}',
-                'ast_text': f'\n{ast_text}',
-                'text': call_text,
-                'x_in': [x_in],
-                'x_out': [x_out],
-                'symbols': {'_output_list': []},
-                'id': idx,
-            }
             rows.append(row)
             func_call_count += 1
             continue
 
-        # --- Regular program sample branch ---
         is_valid = True
         statements = generate_program_statements(texts)
         symbol_table = basic.get_symbol_table()
