@@ -1,7 +1,7 @@
 <template>
   <div class="page">
     <header class="header">
-      <span class="title">REPL</span>
+      <span class="title">FluidAI</span>
     </header>
     <main class="main">
       <Repl />
@@ -31,7 +31,6 @@
   font-family: 'Courier New', Courier, monospace;
   font-size: 13px;
   letter-spacing: 2px;
-  text-transform: uppercase;
 }
 
 .main {

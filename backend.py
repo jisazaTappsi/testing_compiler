@@ -15,6 +15,7 @@ app.add_middleware(
     allow_headers=["Content-Type"],
 )
 
+
 class InterpreterType(BaseModel):
     type: str
     value: str | int | float

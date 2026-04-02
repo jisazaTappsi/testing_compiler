@@ -15,7 +15,7 @@ type HistoryEntry = {
 }
 
 const history = ref<HistoryEntry[]>([
-  { type: 'output', text: 'FluidLang runs a Transformer interpreter: type code with arbitrary syntax it will just figure it out :).'}, {type: 'output', text: 'Type with JS syntax "var my_var=12" or "my_var=12" with Python syntax and it will interpret both correctly' },
+  { type: 'output', text: 'FluidAI runs a Transformer interpreter: type code with arbitrary syntax it will just figure it out :).'}, {type: 'output', text: 'Type with JS syntax "var my_var=12" or "my_var=12" with Python syntax and it will interpret both correctly' },
   { type: 'output', text: 'Type "clear" to reset.' },
 ])
 
@@ -24,6 +24,9 @@ const input = ref('')
 const loading = ref(false)
 const inputEl = ref<HTMLInputElement | null>(null)
 const terminalEl = ref<HTMLDivElement | null>(null)
+const commandHistory = ref<string[]>([])
+const commandHistoryIndex = ref(-1)
+const draftInput = ref('')
 
 onMounted(() => inputEl.value?.focus())
 
@@ -37,10 +40,15 @@ async function scrollToBottom() {
 async function submit() {
   const code = input.value.trim()
   if (!code) return
+  commandHistory.value.push(code)
+  commandHistoryIndex.value = -1
+  draftInput.value = ''
 
   if (code === 'clear') {
     history.value = []
     input.value = ''
+    await nextTick()
+    focusInput()
     return
   }
 
@@ -72,16 +80,61 @@ async function submit() {
   } finally {
     loading.value = false
     await scrollToBottom()
+    await nextTick()
+    focusInput()
   }
 }
 
 function focusInput() {
   inputEl.value?.focus()
 }
+
+function onTerminalClick() {
+  const selection = window.getSelection()
+  if (selection && !selection.isCollapsed) return
+  focusInput()
+}
+
+function moveCaretToEnd() {
+  nextTick(() => {
+    const el = inputEl.value
+    if (!el) return
+    const len = el.value.length
+    el.setSelectionRange(len, len)
+  })
+}
+
+function onHistoryUp() {
+  if (loading.value || commandHistory.value.length === 0) return
+
+  if (commandHistoryIndex.value === -1) {
+    draftInput.value = input.value
+    commandHistoryIndex.value = commandHistory.value.length - 1
+  } else if (commandHistoryIndex.value > 0) {
+    commandHistoryIndex.value -= 1
+  }
+
+  input.value = commandHistory.value[commandHistoryIndex.value] ?? ''
+  moveCaretToEnd()
+}
+
+function onHistoryDown() {
+  if (loading.value || commandHistory.value.length === 0 || commandHistoryIndex.value === -1) return
+
+  if (commandHistoryIndex.value < commandHistory.value.length - 1) {
+    commandHistoryIndex.value += 1
+    input.value = commandHistory.value[commandHistoryIndex.value] ?? ''
+  } else {
+    commandHistoryIndex.value = -1
+    input.value = draftInput.value
+  }
+
+  moveCaretToEnd()
+}
 </script>
 
 <template>
-  <div class="terminal" @click="focusInput" ref="terminalEl">
+  <div class="terminal" @click="onTerminalClick" ref="terminalEl">
     <div
       v-for="(entry, i) in history"
       :key="i"
@@ -98,6 +151,8 @@ function focusInput() {
         v-model="input"
         :disabled="loading"
         @keydown.enter="submit"
+        @keydown.up.prevent="onHistoryUp"
+        @keydown.down.prevent="onHistoryDown"
         autocomplete="off"
         spellcheck="false"
         class="input-field"
