@@ -17,7 +17,7 @@ app.add_middleware(
 
 class InterpreterType(BaseModel):
     type: str
-    value: str|int
+    value: str | int | float
 
     def from_json(self):
         if self.type == "number":

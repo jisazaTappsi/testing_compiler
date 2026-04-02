@@ -12,14 +12,8 @@ dropout = 0.2
 n_head = 3  # 4
 n_embed = 64 * n_head  # 32
 train_split_ratio = 0.8
-introduce_error = False
-
-if introduce_error:
-    code_model_name = 'model_error.pth'
-    dataset_name = 'dataset_error.pkl'
-else:
-    code_model_name = 'code_model_fun.pth'
-    dataset_name = 'dataset_fun.pkl'
+code_model_name = 'code_model_current.pth'
+dataset_name = 'dataset_current.pkl'
 
 
 if torch.cuda.is_available():

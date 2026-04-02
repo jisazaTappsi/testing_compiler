@@ -9,6 +9,7 @@ from tokens import *
 from util import *
 from basic import Parser
 from code_train import CrossAttentionTransformer, block_size
+from data_generator import print_program
 
 # Set random seed for reproducibility
 torch.manual_seed(42)
@@ -86,7 +87,7 @@ def symbol_tables_equal(pred_symbols, target_symbols):
     return True
 
 
-def run(num_samples):
+def run(num_samples=100):
 
     # Load data and merges
     val_samples = get_sample_val_data(num=num_samples)
@@ -105,15 +106,17 @@ def run(num_samples):
         predicted_ctx.symbol_table = basic.get_symbol_table()
         target_ctx = basic.Context('<program>')
         target_ctx.symbol_table = basic.get_symbol_table()
+        program_statements = sample.text.splitlines()
         sample_run_ok = True
         statement_ast_matches = []
 
-        print(f'{idx}:\n{sample.lexer_text}')
+        print(f'{idx}:')
+        print_program(program_statements)
         for x_in, x_out in zip(sample.x_in, sample.x_out):
             predicted_ast_text = model.inference(x_in, ast_merges)
-            print(f'P(#{predicted_ast_text.count("(") - predicted_ast_text.count(")")}): {predicted_ast_text}')
+            print(f'P: {predicted_ast_text}')
             target_ast_text = sample_decode(x_out, ast_merges)
-            print(f"T(#{target_ast_text.count('(') - target_ast_text.count(')')}): {target_ast_text}\n")
+            print(f"T: {target_ast_text}\n")
 
             statement_ast_matches.append(predicted_ast_text == target_ast_text)
 
@@ -162,4 +165,4 @@ def run(num_samples):
 
 
 if __name__ == '__main__':
-    run(num_samples=250)
+    run(num_samples=100)

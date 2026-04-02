@@ -26,9 +26,7 @@ def log_scale_int(low: int, high: int, base: float = math.e) -> int:
 
 
 def int_part():
-    # TODO: tests proposed
-    #return 0 if random.random() < 0.1 else log_scale_int(1, 2**31, base=10)
-    return 0 if random.random() < 0.1 else log_scale_int(1, 9999)
+    return 0 if random.random() < 0.1 else log_scale_int(1, 2**31, base=6)
 
 
 def generate_number():
@@ -72,27 +70,38 @@ def generate_factor(depth=0, max_depth=5, allowed_vars=None):
         return f"({expr})"
 
 
+def generate_call(depth, max_depth, allowed_vars):
+    """call       : factor (LPAREN (expr (COMMA expr)*)? RPAREN)?"""
+    rand = random.random()
+    return generate_factor(depth, max_depth, allowed_vars)
+    #if rand < 0.5:  # factor
+    #    return generate_factor(depth, max_depth, allowed_vars)
+    #else: # a call.
+
+    #    #return f'{generate_factor(depth, max_depth, allowed_vars)}()'
+
+
 def generate_term(depth=0, max_depth=5, allowed_vars=None):
     """
     Generate a term according to grammar:
     term : factor ((MUL|DIV) factor)*
     """
     if depth >= max_depth:
-        return generate_factor(depth, max_depth, allowed_vars)
+        return generate_call(depth, max_depth, allowed_vars)
 
-    result = generate_factor(depth, max_depth, allowed_vars)
+    result = generate_call(depth, max_depth, allowed_vars)
     
     # Randomly add more factors with MUL or DIV operators (often 0 to keep equations small)
     num_ops = 1 if random.random() < 0.3 else 0
     for _ in range(num_ops):
 
         # Desperate attempt at trying to decrease the division by zeroes...
-        op = random.choices(['*', '/'], weights=[0.9, 0.1], k=1)[0]
+        op = random.choices(['*', '/'], weights=[0.95, 0.05], k=1)[0]
 
         while True:  # Don't allow division by zero
-            factor = generate_factor(depth, max_depth, allowed_vars)
+            factor = generate_call(depth, max_depth, allowed_vars)
             try:
-                factor = factor.replace('None', '0')  # in our interpreter None is a 0
+                factor = factor.replace(tokens.NULL, '0')  # in our interpreter None is a 0
                 mini_expr = int(eval(factor))
                 if op != '/' or mini_expr != 0:
                     break
@@ -126,7 +135,7 @@ def generate_expr(depth=0, max_depth=5, allowed_vars=None):
     return result
 
 
-def generate_arithmetic_expression(allowed_vars):
+def gen_arith_expr(allowed_vars):
     """
     Generate a valid arithmetic expression that can be parsed.
     Optionally limit the length of the generated expression.
@@ -134,11 +143,11 @@ def generate_arithmetic_expression(allowed_vars):
     max_length = block_size
 
     # Start with a reasonable max_depth based on block_size. Deeper expressions tend to be longer.
-    max_depth = 2
+    max_depth = 3
     expr = generate_expr(depth=0, max_depth=max_depth, allowed_vars=allowed_vars)
 
     # If expression is too long, regenerate with lower max_depth (stricter cap leaves headroom for comparisons/logic encoding)
-    while len(expr) > max_length//10:
+    while len(expr) > max_length//8:
         max_depth = max(1, max_depth - 1)
         expr = generate_expr(depth=0, max_depth=max_depth, allowed_vars=allowed_vars)
 
@@ -180,21 +189,19 @@ def generate_program_expression(allowed_vars) -> str:
     arithmetic, comparison operators, logical AND/OR, and the identifiers
     True, False and null.
     """
-    def gen_arith():
-        return generate_arithmetic_expression(allowed_vars)
 
     # Start from either a boolean-like identifier or a plain arithmetic expression
     if random.random() < 0.3:
         expr = random.choice(BOOLEAN_LITERALS)
     else:
-        expr = gen_arith()
+        expr = gen_arith_expr(allowed_vars)
 
     # Optionally add one or more comparison operations (slightly lower so more fit in block_size)
     if random.random() < 0.20:
         num_comparisons = random.randint(0, 1)
         for _ in range(num_comparisons):
             op = random.choice(['==', '!=', '<', '>', '<=', '>='])
-            right = gen_arith()
+            right = gen_arith_expr(allowed_vars)
             expr = f"{expr}{op}{right}"
 
     # Optional leading NOT (low prob to keep equations small)
@@ -205,13 +212,13 @@ def generate_program_expression(allowed_vars) -> str:
     num_logic_ops = 1 if random.random() < 0.2 else 0
     for _ in range(num_logic_ops):
         op = random.choice([tokens.AND, tokens.OR])
-        right = gen_arith()
+        right = gen_arith_expr(allowed_vars)
         # Sometimes turn the right-hand side into a comparison expression as well
         if random.random() < 0.7:
             num_cmp = random.randint(0, 1)
             for _ in range(num_cmp):
                 cmp_op = random.choice(['==', '!=', '<', '>', '<=', '>='])
-                right = f"{right}{cmp_op}{gen_arith()}"
+                right = f"{right}{cmp_op}{gen_arith_expr(allowed_vars)}"
         if random.random() < 0.3:
             right = f"{tokens.NOT} {right}"
         expr = f"{expr} {op} {right}"
@@ -349,9 +356,9 @@ class Sample:
 
 
 def print_program(statements):
-    print('\n\nProgram sample:')
+    print('\nProgram sample------------------')
     print(f'\n'.join(statements))
-    print('----------------------------------\n\n')
+    print('----------------------------------\n')
 
 
 def generate():
@@ -359,19 +366,7 @@ def generate():
     rows = []
     texts = set()
 
-    func_call_count = 0
-
     for idx in range(num_samples):
-        """
-        if random.random() < FUNC_CALL_RATIO:
-            row = generate_func_call_sample(idx)
-            if row is None:
-                invalid_count += 1
-                continue
-            rows.append(row)
-            func_call_count += 1
-            continue
-        """
 
         is_valid = True
         statements = generate_program_statements(texts)
@@ -454,7 +449,7 @@ def generate():
     samples_df.to_pickle(dataset_name)  # Save dataset as a Pandas DataFrame (pickled)
 
     valid_count = len(samples_df)
-    print(f"\nValid: {valid_count}, Invalid: {invalid_count}, Func calls: {func_call_count}, Success rate: {valid_count/num_samples*100:.1f}%")
+    print(f"\nValid: {valid_count}, Invalid: {invalid_count}, Success rate: {valid_count/num_samples*100:.1f}%")
 
 
 if __name__ == '__main__':
