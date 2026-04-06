@@ -72,13 +72,17 @@ def generate_factor(depth=0, max_depth=5, allowed_vars=None):
 
 def generate_call(depth, max_depth, allowed_vars):
     """call       : factor (LPAREN (expr (COMMA expr)*)? RPAREN)?"""
-    rand = random.random()
-    return generate_factor(depth, max_depth, allowed_vars)
-    #if rand < 0.5:  # factor
-    #    return generate_factor(depth, max_depth, allowed_vars)
-    #else: # a call.
+    # Keep recursion bounded: at max depth emit only a simple factor.
+    if depth >= max_depth:
+        return generate_factor(depth, max_depth, allowed_vars)
 
-    #    #return f'{generate_factor(depth, max_depth, allowed_vars)}()'
+    if random.random() < 0.5:  # factor
+        return generate_factor(depth, max_depth, allowed_vars)
+
+    # Function call with recursive argument expressions.
+    name, params, _ = random.choice(FUNC_TEMPLATES)
+    args = [generate_expr(depth + 1, max_depth, allowed_vars) for _ in params]
+    return f"{name}({','.join(args)})"
 
 
 def generate_term(depth=0, max_depth=5, allowed_vars=None):
@@ -143,11 +147,11 @@ def gen_arith_expr(allowed_vars):
     max_length = block_size
 
     # Start with a reasonable max_depth based on block_size. Deeper expressions tend to be longer.
-    max_depth = 3
+    max_depth = 4
     expr = generate_expr(depth=0, max_depth=max_depth, allowed_vars=allowed_vars)
 
     # If expression is too long, regenerate with lower max_depth (stricter cap leaves headroom for comparisons/logic encoding)
-    while len(expr) > max_length//8:
+    while len(expr) > max_length//5:
         max_depth = max(1, max_depth - 1)
         expr = generate_expr(depth=0, max_depth=max_depth, allowed_vars=allowed_vars)
 
@@ -282,6 +286,133 @@ FUNC_TEMPLATES = [
 ]
 
 
+_COMPILED_FUNC_TEMPLATES = None
+
+
+def _get_compiled_func_templates():
+    """Compile FUNC_TEMPLATES body expressions into AST nodes once."""
+    global _COMPILED_FUNC_TEMPLATES
+    if _COMPILED_FUNC_TEMPLATES is not None:
+        return _COMPILED_FUNC_TEMPLATES
+
+    compiled = []
+    for name, params, body in FUNC_TEMPLATES:
+        lexer = basic.Lexer('<func_template>', body)
+        body_tokens, error = lexer.make_tokens()
+        if error:
+            continue
+        parser = basic.Parser(body_tokens)
+        ast = parser.parse()
+        if ast.error:
+            continue
+        compiled.append((name, params, ast.node))
+
+    _COMPILED_FUNC_TEMPLATES = compiled
+    return _COMPILED_FUNC_TEMPLATES
+
+
+def _load_template_functions_into_context(context):
+    """Inject template function definitions into the runtime symbol table"""
+    for name, params, body_node in _get_compiled_func_templates():
+        func_value = basic.Function(name, body_node, params).set_context(context).set_pos()
+        context.symbol_table.set(name, func_value)
+
+
+def _find_matching_paren(text: str, open_idx: int) -> int:
+    depth = 0
+    for idx in range(open_idx, len(text)):
+        if text[idx] == '(':
+            depth += 1
+        elif text[idx] == ')':
+            depth -= 1
+            if depth == 0:
+                return idx
+    return -1
+
+
+def _split_top_level_args(args_text: str) -> list[str]:
+    """Split CallNode arg string on top-level spaces."""
+    args = []
+    current = []
+    depth = 0
+
+    for ch in args_text:
+        if ch == '(':
+            depth += 1
+            current.append(ch)
+        elif ch == ')':
+            depth -= 1
+            current.append(ch)
+        elif ch == ' ' and depth == 0:
+            if current:
+                args.append(''.join(current).strip())
+                current = []
+        else:
+            current.append(ch)
+
+    if current:
+        args.append(''.join(current).strip())
+
+    return [a for a in args if a]
+
+
+def _replace_template_calls_in_expr(expr_text: str, templates_map: dict) -> str:
+    """
+    Rewrite template calls in AST string form:
+    (IDENTIFIER:sum(INT:9 INT:8)) -> (INT:9 PLUS INT:8)
+    """
+    out = []
+    i = 0
+    ident_prefix = '(IDENTIFIER:'
+
+    while i < len(expr_text):
+        if expr_text.startswith(ident_prefix, i):
+            name_start = i + len(ident_prefix)
+            name_end = name_start
+            while name_end < len(expr_text) and (expr_text[name_end].isalnum() or expr_text[name_end] == '_'):
+                name_end += 1
+
+            func_name = expr_text[name_start:name_end]
+            if name_end < len(expr_text) and expr_text[name_end] == '(' and func_name in templates_map:
+                args_open = name_end
+                args_close = _find_matching_paren(expr_text, args_open)
+                if args_close != -1 and args_close + 1 < len(expr_text) and expr_text[args_close + 1] == ')':
+                    raw_args = expr_text[args_open + 1:args_close]
+                    arg_exprs = _split_top_level_args(raw_args) if raw_args.strip() else []
+                    params, body_ast = templates_map[func_name]
+
+                    if len(arg_exprs) == len(params):
+                        expanded_args = [
+                            _replace_template_calls_in_expr(arg, templates_map)
+                            for arg in arg_exprs
+                        ]
+                        replaced = body_ast
+                        for param, arg in zip(params, expanded_args):
+                            replaced = re.sub(
+                                rf'IDENTIFIER:{re.escape(param)}\b',
+                                lambda _m, a=arg: a,
+                                replaced
+                            )
+                        replaced = _replace_template_calls_in_expr(replaced, templates_map)
+                        out.append(replaced)
+                        i = args_close + 2  # consume " )) "
+                        continue
+
+        out.append(expr_text[i])
+        i += 1
+
+    return ''.join(out)
+
+
+def get_replaced_methods(ast_text: str) -> str:
+    """Replace method-call AST nodes with their inlined template-body AST."""
+    templates_map = {
+        name: (params, str(body_node))
+        for name, params, body_node in _get_compiled_func_templates()
+    }
+    return _replace_template_calls_in_expr(ast_text, templates_map)
+
+
 def _substitute_params(body, params, args):
     """Replace parameter names in body with concrete argument values (whole-word)."""
     result = body
@@ -367,7 +498,6 @@ def generate():
     texts = set()
 
     for idx in range(num_samples):
-
         is_valid = True
         statements = generate_program_statements(texts)
         symbol_table = basic.get_symbol_table()
@@ -409,11 +539,13 @@ def generate():
                     is_valid = False
                     break
                 ast_text = f'{tokens.SOF} {ast.node} {tokens.EOF}'
+                ast_text = get_replaced_methods(ast_text)
                 sample.ast_text += f'\n{ast_text}'
 
                 interpreter = basic.Interpreter()
                 context = basic.Context('<program>')
                 context.symbol_table = symbol_table
+                _load_template_functions_into_context(context)
                 res = interpreter.visit(ast.node, context)
                 symbol_table = context.symbol_table
                 if res.error:
