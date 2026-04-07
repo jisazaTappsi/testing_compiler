@@ -271,7 +271,7 @@ FUNC_TEMPLATES = [
     ("prod", ["x", "y"], "x*y"),
     ("double", ["x"], "x+x"),
     ("square", ["x"], "x*x"),
-    ("negate", ["x"], "-x"),
+    ("negate", ["x"], "not x"),
     ("triple", ["n"], "n+n+n"),
     ("add3", ["a", "b", "c"], "a+b+c"),
     ("mul3", ["a", "b", "c"], "a*b*c"),

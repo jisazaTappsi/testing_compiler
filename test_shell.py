@@ -206,3 +206,53 @@ def test_function_def_and_calls():
     value, error = basic.run('<stdin>', "zero(9)")
     assert error is not None
     assert isinstance(error, basic.RTError)
+
+
+def test_arithmetic_styles():
+    # std function => sum(3,4)
+    res, _ = basic.run_ai('<stdin>', "sum(3,4)")
+    assert res.error is None
+    assert isinstance(res.value, basic.Number)
+    assert res.value.value == 7
+
+    # with no parenthesis => times 8 8
+    res, _ = basic.run_ai('<stdin>', "times 8 8")
+    assert res.error is None
+    assert isinstance(res.value, basic.Number)
+    assert res.value.value == 64
+
+    # natural language => 3 plus 4
+    res, _ = basic.run_ai('<stdin>', "3 plus 4")
+    assert res.error is None
+    assert isinstance(res.value, basic.Number)
+    assert res.value.value == 7
+
+    # with spaces => 3     times    3
+    res, _ = basic.run_ai('<stdin>', "3     times    3")
+    assert res.error is None
+    assert isinstance(res.value, basic.Number)
+    assert res.value.value == 9
+
+    # calling method => 3.sum(4)
+    res, _ = basic.run_ai('<stdin>', "3.sum(4)")
+    assert res.error is None
+    assert isinstance(res.value, basic.Number)
+    assert res.value.value == 7
+
+    # calling method, no paren => 3.times 4
+    res, _ = basic.run_ai('<stdin>', "3.times 4")
+    assert res.error is None
+    assert isinstance(res.value, basic.Number)
+    assert res.value.value == 12
+
+    # calculator style => 3 + 4
+    res, _ = basic.run_ai('<stdin>', "3 + 4")
+    assert res.error is None
+    assert isinstance(res.value, basic.Number)
+    assert res.value.value == 7
+
+    # calculator style => 3 * 4
+    res, _ = basic.run_ai('<stdin>', "3 * 4")
+    assert res.error is None
+    assert isinstance(res.value, basic.Number)
+    assert res.value.value == 12
