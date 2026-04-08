@@ -11,8 +11,6 @@ import basic
 import tokens
 from util import *
 
-num_samples = 100_000  # 5_000_000
-
 
 def log_scale_int(low: int, high: int, base: float = math.e) -> int:
     """Sample an integer in [low, high] with log scale so smaller numbers are overrepresented.
@@ -78,26 +76,26 @@ def generate_call(depth, max_depth, allowed_vars):
         return generate_factor(depth, max_depth, allowed_vars)
 
     choice = random.random()
-    if choice < 0.2:
+    if choice < 0.33:
         return generate_factor(depth, max_depth, allowed_vars)
-    elif choice < 0.3:
+    elif choice < 0.66:
         name, params, _ = random.choice(FUNC_TEMPLATES)
         args = [generate_expr(depth + 1, max_depth, allowed_vars) for _ in params]
         return f"{name}({','.join(args)})"
-
-    name, params, _ = random.choice(OP_TEMPLATES)
-    left = generate_call(depth + 1, max_depth, allowed_vars)
-    right = generate_call(depth + 1, max_depth, allowed_vars)
-    if name == "over":
-        while True:
-            try:
-                test = right.replace(tokens.NULL, '0')
-                if int(eval(test)) != 0:
+    else:
+        name, params, _ = random.choice(OP_TEMPLATES)
+        left = generate_call(depth + 1, max_depth, allowed_vars)
+        right = generate_call(depth + 1, max_depth, allowed_vars)
+        if name == "over":
+            while True:
+                try:
+                    test = right.replace(tokens.NULL, '0')
+                    if int(eval(test)) != 0:
+                        break
+                except Exception:
                     break
-            except Exception:
-                break
-            right = generate_call(depth + 1, max_depth, allowed_vars)
-    return f"{left} {name} {right}"
+                right = generate_call(depth + 1, max_depth, allowed_vars)
+        return f"{left} {name} {right}"
 
 
 def generate_term(depth=0, max_depth=5, allowed_vars=None):
@@ -633,7 +631,7 @@ def generate():
     rows = []
     texts = set()
 
-    for idx in range(num_samples):
+    for idx in range(num_training_samples):
         is_valid = True
         statements = generate_program_statements(texts)
         symbol_table = basic.get_symbol_table()
@@ -641,7 +639,7 @@ def generate():
 
         if idx % 1_000 == 0:
             print_program(statements)
-            print(f"loaded: {(idx/num_samples)*100:.2f}%")
+            print(f"loaded: {(idx / num_training_samples) * 100:.2f}%")
 
         for text in statements:
             lexer = basic.Lexer('<stdin>', text)
@@ -717,7 +715,7 @@ def generate():
     samples_df.to_pickle(dataset_name)  # Save dataset as a Pandas DataFrame (pickled)
 
     valid_count = len(samples_df)
-    print(f"\nValid: {valid_count}, Invalid: {invalid_count}, Success rate: {valid_count/num_samples*100:.1f}%")
+    print(f"\nValid: {valid_count}, Invalid: {invalid_count}, Success rate: {valid_count / num_training_samples * 100:.1f}%")
 
 
 if __name__ == '__main__':

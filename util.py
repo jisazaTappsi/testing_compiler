@@ -1,8 +1,9 @@
 import torch
 
+num_training_samples = 2_000_000  # 5_000_000
 batch_size = 64  # 32
 block_size = 64  # 256
-max_iters = 5_001  # 30_001
+max_iters = 35_001  # 5_001
 eval_interval = 500
 lr_peak = 8e-4  # peak learning rate
 lr_min = 1e-4  # min learning rate
