@@ -208,6 +208,25 @@ def test_function_def_and_calls():
     assert isinstance(error, basic.RTError)
 
 
+def test_learned_infix_operators():
+    """Infix template ops (e.g. 8 times 8); meaning from data_generator templates + symbol table only."""
+    import data_generator as dg
+
+    text = '7+8 times 8'
+    lexer = basic.Lexer('<stdin>', text)
+    tokens, err = lexer.make_tokens()
+    assert err is None
+    ast = basic.Parser(tokens).parse()
+    assert ast.error is None
+
+    context = basic.Context('<t>')
+    context.symbol_table = basic.get_symbol_table()
+    dg._load_template_functions_into_context(context)
+    res = basic.Interpreter().visit(ast.node, context)
+    assert res.error is None
+    assert res.value.value == 7 + 64
+
+
 def test_arithmetic_styles():
     # std function => sum(3,4)
     res, _ = basic.run_ai('<stdin>', "sum(3,4)")
@@ -216,7 +235,7 @@ def test_arithmetic_styles():
     assert res.value.value == 7
 
     # with no parenthesis => times 8 8
-    res, _ = basic.run_ai('<stdin>', "times 8 8")
+    res, _ = basic.run_ai('<stdin>', "mul 8 8")
     assert res.error is None
     assert isinstance(res.value, basic.Number)
     assert res.value.value == 64

@@ -6,7 +6,7 @@ comp-expr  : NOT comp-expr
 
 arith-expr : term ((PLUS|MINUS) term)*
 
-term       : call ((MUL|DIV) factor)*
+term       : call ((MUL|DIV|IDENTIFIER) call)*   # IDENTIFIER infix ≡ binary function call by name
 
 call       : factor (LPAREN (expr (COMMA expr)*)? RPAREN)?
 

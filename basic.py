@@ -877,7 +877,7 @@ class Parser:
         return res.success(FuncDefNode(var_name_tok, arg_name_toks, node_to_return))
 
     def term(self):
-        return self.bin_op(self.call, (MUL, DIV))
+        return self.bin_op(self.call, (MUL, DIV, IDENTIFIER))
 
     def call(self):
         res = ParseResult()
@@ -1185,6 +1185,8 @@ class Number(Value):
 
 
 class Function(Value):
+    """Callable value: used for both ``f(x,y)`` and infix ``x f y`` when ``f`` names this function."""
+
     def __init__(self, name, body_node, arg_names):
         super().__init__()
         self.name = name or '<anonymous>'
@@ -1281,6 +1283,13 @@ class SymbolTable:
 ########################
 
 class Interpreter:
+    """Expression execution.
+
+    User-defined *operators* and *functions* are the same abstraction: a name bound to a
+    ``Function`` value. Infix ``a op b`` is executed by the same mechanism as call syntax
+    ``op(a, b)`` — both resolve the name and apply :meth:`Function.execute` to the operands.
+    """
+
     def visit(self, node, context):
         method_name = f'visit_{type(node).__name__}'
         method = getattr(self, method_name, self.no_visit_method)
@@ -1288,6 +1297,10 @@ class Interpreter:
 
     def no_visit_method(self, node, context):
         raise Exception(f'No visit_{type(node).__name__} defined')
+
+    def _invoke_function(self, fn_value, args):
+        """Apply a ``Function`` value to evaluated arguments (shared by calls and infix ``IDENTIFIER`` ops)."""
+        return fn_value.execute(args)
 
     def visit_NumberNode(self, node, context):
         return RTResult().success(
@@ -1325,6 +1338,18 @@ class Interpreter:
         right = res.register(self.visit(node.right_node, context))
         if res.error: return res
 
+        if node.op_tok.type == IDENTIFIER:
+            # Same as call syntax op(left, right): one Function, two args.
+            name = node.op_tok.value
+            fn = context.symbol_table.get(name)
+            if isinstance(fn, Function):
+                return self._invoke_function(fn, [left, right])
+            return res.failure(RTError(
+                node.op_tok.pos_start, node.op_tok.pos_end,
+                f'"{name}" is not defined',
+                context,
+            ))
+
         error = None
         if node.op_tok.type == PLUS:
             result, error = left.added_to(right)
@@ -1350,11 +1375,16 @@ class Interpreter:
             result, error = left.anded_by(right)
         elif node.op_tok.matches(KEYWORD, OR):
             result, error = left.ored_by(right)
+        else:
+            return res.failure(RTError(
+                node.op_tok.pos_start, node.op_tok.pos_end,
+                f'Unsupported binary op {node.op_tok.type}',
+                context,
+            ))
 
         if error:
             return res.failure(error)
-        else:
-            return res.success(result.set_pos(node.pos_start, node.pos_end))
+        return res.success(result.set_pos(node.pos_start, node.pos_end))
 
     def visit_UnaryOpNode(self, node, context):
         res = RTResult()
@@ -1461,7 +1491,7 @@ class Interpreter:
             args.append(res.register(self.visit(arg_node, context)))
             if res.error: return res
 
-        return_value = res.register(value_to_call.execute(args))
+        return_value = res.register(self._invoke_function(value_to_call, args))
         if res.error: return res
         return res.success(return_value)
 

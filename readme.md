@@ -16,7 +16,7 @@ Will support 4 main ways of doing arithmetics the following:
 1. Function like:
 
     std function        => sum(3,4)
-    with no parenthesis => times 8 8
+    with no parenthesis => mul 8 8
 
 2. operand like:
 

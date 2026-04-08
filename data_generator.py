@@ -71,18 +71,33 @@ def generate_factor(depth=0, max_depth=5, allowed_vars=None):
 
 
 def generate_call(depth, max_depth, allowed_vars):
-    """call       : factor (LPAREN (expr (COMMA expr)*)? RPAREN)?"""
+    """call       : factor (LPAREN (expr (COMMA expr)*)? RPAREN)?
+    Functions: name(args). Learned *operators*: infix between calls, e.g. 8 times 9 (template-defined; not builtins)."""
     # Keep recursion bounded: at max depth emit only a simple factor.
     if depth >= max_depth:
         return generate_factor(depth, max_depth, allowed_vars)
 
-    if random.random() < 0.5:  # factor
+    choice = random.random()
+    if choice < 0.2:
         return generate_factor(depth, max_depth, allowed_vars)
+    elif choice < 0.3:
+        name, params, _ = random.choice(FUNC_TEMPLATES)
+        args = [generate_expr(depth + 1, max_depth, allowed_vars) for _ in params]
+        return f"{name}({','.join(args)})"
 
-    # Function call with recursive argument expressions.
-    name, params, _ = random.choice(FUNC_TEMPLATES)
-    args = [generate_expr(depth + 1, max_depth, allowed_vars) for _ in params]
-    return f"{name}({','.join(args)})"
+    name, params, _ = random.choice(OP_TEMPLATES)
+    left = generate_call(depth + 1, max_depth, allowed_vars)
+    right = generate_call(depth + 1, max_depth, allowed_vars)
+    if name == "over":
+        while True:
+            try:
+                test = right.replace(tokens.NULL, '0')
+                if int(eval(test)) != 0:
+                    break
+            except Exception:
+                break
+            right = generate_call(depth + 1, max_depth, allowed_vars)
+    return f"{left} {name} {right}"
 
 
 def generate_term(depth=0, max_depth=5, allowed_vars=None):
@@ -163,8 +178,13 @@ _VAR_NAME_LETTERS = 'abcdefghijklmnopqrstuvwxyz'  # single letters (no 'v' to av
 
 
 def _new_var_name(declared: list) -> str:
-    """Return a variable name not in declared and not a keyword. Letters only."""
-    forbidden = set(declared) | set(tokens.KEYWORDS)
+    """Return a variable name not in declared, not a keyword, and not a template name. Letters only."""
+    forbidden = (
+        set(declared)
+        | set(tokens.KEYWORDS)
+        | {n for n, _, _ in FUNC_TEMPLATES}
+        | {n for n, _, _ in OP_TEMPLATES}
+    )
     # Single-letter names first
     available = [c for c in _VAR_NAME_LETTERS if c not in forbidden]
     if available:
@@ -239,7 +259,7 @@ def generate_program_statements(texts) -> list:
 
     for _ in range(num_statements):
         while True:
-            if not declared or random.random() < 0.6:
+            if not declared or random.random() < 0.8:
                 # Variable declaration: var name = expr
                 name = _new_var_name(declared)
                 expr = generate_program_expression(declared)
@@ -285,8 +305,18 @@ FUNC_TEMPLATES = [
     ("dec", ["n"], "n-1"),
 ]
 
+# Infix spellings for the same abstract "functions" as FUNC_TEMPLATES: training pairs can use
+# either sum(a,b) or a plus b — both lower to the same Function.execute semantics in the runtime.
+OP_TEMPLATES = [
+    ("times", ["a", "b"], "a*b"),
+    ("over", ["a", "b"], "a/b"),
+    ("plus", ["a", "b"], "a+b"),
+    ("minus", ["a", "b"], "a-b"),
+]
+
 
 _COMPILED_FUNC_TEMPLATES = None
+_COMPILED_OP_TEMPLATES = None
 
 
 def _get_compiled_func_templates():
@@ -311,9 +341,34 @@ def _get_compiled_func_templates():
     return _COMPILED_FUNC_TEMPLATES
 
 
+def _get_compiled_op_templates():
+    """Compile OP_TEMPLATES body expressions into AST nodes (parallel to FUNC_TEMPLATES)."""
+    global _COMPILED_OP_TEMPLATES
+    if _COMPILED_OP_TEMPLATES is not None:
+        return _COMPILED_OP_TEMPLATES
+
+    compiled = []
+    for name, params, body in OP_TEMPLATES:
+        lexer = basic.Lexer('<op_template>', body)
+        body_tokens, error = lexer.make_tokens()
+        if error:
+            continue
+        parser = basic.Parser(body_tokens)
+        ast = parser.parse()
+        if ast.error:
+            continue
+        compiled.append((name, params, ast.node))
+
+    _COMPILED_OP_TEMPLATES = compiled
+    return _COMPILED_OP_TEMPLATES
+
+
 def _load_template_functions_into_context(context):
-    """Inject template function definitions into the runtime symbol table"""
+    """Inject template bodies for FUNC names and for infix OP names (used at runtime via visit_BinOp + Function)."""
     for name, params, body_node in _get_compiled_func_templates():
+        func_value = basic.Function(name, body_node, params).set_context(context).set_pos()
+        context.symbol_table.set(name, func_value)
+    for name, params, body_node in _get_compiled_op_templates():
         func_value = basic.Function(name, body_node, params).set_context(context).set_pos()
         context.symbol_table.set(name, func_value)
 
@@ -404,13 +459,94 @@ def _replace_template_calls_in_expr(expr_text: str, templates_map: dict) -> str:
     return ''.join(out)
 
 
+def _parse_one_ast_node(s: str, start: int):
+    """Parse one AST subtree string at start; returns (node_str, end_index) or (None, start)."""
+    while start < len(s) and s[start].isspace():
+        start += 1
+    if start >= len(s):
+        return None, start
+    if s[start] == '(':
+        close = _find_matching_paren(s, start)
+        if close == -1:
+            return None, start
+        return s[start : close + 1], close + 1
+    m = re.match(r'[A-Z_]+:[^\s()]+', s[start:])
+    if m:
+        return m.group(0), start + len(m.group(0))
+    return None, start
+
+
+def _try_expand_infix_op(segment: str, op_map: dict) -> Optional[str]:
+    """If segment is '(left IDENTIFIER:op right)' for a template op, return inlined body AST string."""
+    if len(segment) < 2 or segment[0] != '(' or segment[-1] != ')':
+        return None
+    inner = segment[1:-1]
+    for op_name, (params, body_ast) in op_map.items():
+        needle = f' IDENTIFIER:{op_name} '
+        pos = inner.find(needle)
+        while pos != -1:
+            left_s, le = _parse_one_ast_node(inner, 0)
+            r_start = pos + len(needle)
+            right_s, rend = _parse_one_ast_node(inner, r_start)
+            if (
+                left_s is not None
+                and right_s is not None
+                and le == pos
+                and rend == len(inner)
+                and len(params) == 2
+            ):
+                replaced = body_ast
+                for param, arg in zip(params, (left_s, right_s)):
+                    replaced = re.sub(
+                        rf'IDENTIFIER:{re.escape(param)}\b',
+                        lambda _m, a=arg: a,
+                        replaced,
+                    )
+                return replaced
+            pos = inner.find(needle, pos + 1)
+    return None
+
+
+def _replace_infix_identifier_ops_in_expr(expr_text: str, op_map: dict) -> str:
+    """Inline (left IDENTIFIER:op right) using OP_TEMPLATES bodies."""
+    if not op_map:
+        return expr_text
+    out = expr_text
+    changed = True
+    while changed:
+        changed = False
+        i = 0
+        while i < len(out):
+            if out[i] == '(':
+                close = _find_matching_paren(out, i)
+                if close != -1:
+                    seg = out[i : close + 1]
+                    exp = _try_expand_infix_op(seg, op_map)
+                    if exp is not None:
+                        out = out[:i] + exp + out[close + 1 :]
+                        changed = True
+                        break
+            i += 1
+    return out
+
+
 def get_replaced_methods(ast_text: str) -> str:
-    """Replace method-call AST nodes with their inlined template-body AST."""
-    templates_map = {
+    """Inline function calls and learned infix ops into primitive AST."""
+    func_map = {
         name: (params, str(body_node))
         for name, params, body_node in _get_compiled_func_templates()
     }
-    return _replace_template_calls_in_expr(ast_text, templates_map)
+    op_map = {
+        name: (params, str(body_node))
+        for name, params, body_node in _get_compiled_op_templates()
+    }
+    prev = None
+    t = ast_text
+    while t != prev:
+        prev = t
+        t = _replace_template_calls_in_expr(t, func_map)
+        t = _replace_infix_identifier_ops_in_expr(t, op_map)
+    return t
 
 
 def _substitute_params(body, params, args):
