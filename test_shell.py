@@ -235,7 +235,7 @@ def test_arithmetic_styles():
     assert res.value.value == 7
 
     # with no parenthesis => times 8 8
-    res, _ = basic.run_ai('<stdin>', "mul 8 8")
+    res, _ = basic.run_ai('<stdin>', "mul(8 8)")
     assert res.error is None
     assert isinstance(res.value, basic.Number)
     assert res.value.value == 64

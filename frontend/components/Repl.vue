@@ -28,6 +28,13 @@ const commandHistory = ref<string[]>([])
 const commandHistoryIndex = ref(-1)
 const draftInput = ref('')
 
+const config = useRuntimeConfig()
+
+function interpretUrl() {
+  const base = String(config.public.apiBase).replace(/\/$/, '')
+  return `${base}/interpret`
+}
+
 onMounted(() => inputEl.value?.focus())
 
 async function scrollToBottom() {
@@ -58,7 +65,7 @@ async function submit() {
   await scrollToBottom()
 
   try {
-    const { data } = await axios.post<InterpretResponse>('/api/interpret', { code, symbols })
+    const { data } = await axios.post<InterpretResponse>(interpretUrl(), { code, symbols })
 
     if (data.error) {
       history.value.push({ type: 'error', text: data.error })

@@ -218,3 +218,5 @@ merges_*.json
 
 frontend/.nuxt
 frontend/node_modules
+frontend/dist
+frontend/.output/

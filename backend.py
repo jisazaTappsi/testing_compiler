@@ -1,3 +1,4 @@
+import os
 from typing import Dict, Optional
 
 from fastapi import FastAPI
@@ -8,9 +9,15 @@ import basic
 
 app = FastAPI()
 
+# Comma-separated list, e.g. "http://localhost:4000,https://d123.cloudfront.net"
+cors_raw = os.environ.get(
+    "CORS_ORIGINS", "http://localhost:4000"
+)
+cors_origins = [o.strip() for o in cors_raw.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:4000"],
+    allow_origins=cors_origins,
     allow_methods=["POST"],
     allow_headers=["Content-Type"],
 )

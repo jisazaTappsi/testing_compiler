@@ -83,7 +83,7 @@ def generate_call(depth, max_depth, allowed_vars):
         args = [generate_expr(depth + 1, max_depth, allowed_vars) for _ in params]
         return f"{name}({','.join(args)})"
     else:
-        name, params, _ = random.choice(OP_TEMPLATES)
+        name, params, _ = random.choice([f for f in FUNC_TEMPLATES if len(f[1]) == 2])
         left = generate_call(depth + 1, max_depth, allowed_vars)
         right = generate_call(depth + 1, max_depth, allowed_vars)
         if name == "over":
@@ -181,7 +181,6 @@ def _new_var_name(declared: list) -> str:
         set(declared)
         | set(tokens.KEYWORDS)
         | {n for n, _, _ in FUNC_TEMPLATES}
-        | {n for n, _, _ in OP_TEMPLATES}
     )
     # Single-letter names first
     available = [c for c in _VAR_NAME_LETTERS if c not in forbidden]
@@ -278,38 +277,90 @@ def generate_program_statements(texts) -> list:
 
 
 # ---------------------------------------------------------------------------
-# Function call -> body AST samples
+# Template names: function call syntax name(args) and infix syntax left name right (arity-2 only).
+# Sorted by name; used for compilation, symbol injection, and AST inlining.
 # ---------------------------------------------------------------------------
 FUNC_TEMPLATES = [
-    ("sum", ["a", "b"], "a+b"),
-    ("sub", ["a", "b"], "a-b"),
-    ("mul", ["a", "b"], "a*b"),
     ("add", ["x", "y"], "x+y"),
-    ("diff", ["x", "y"], "x-y"),
-    ("prod", ["x", "y"], "x*y"),
-    ("double", ["x"], "x+x"),
-    ("square", ["x"], "x*x"),
-    ("negate", ["x"], "not x"),
-    ("triple", ["n"], "n+n+n"),
     ("add3", ["a", "b", "c"], "a+b+c"),
-    ("mul3", ["a", "b", "c"], "a*b*c"),
+    ("add4", ["a", "b", "c", "d"], "a+b+c+d"),
+    ("antip", ["a", "b"], "0-a*b"),
+    ("apart", ["a", "b"], "a-b"),
     ("avg", ["a", "b"], "(a+b)/2"),
-    ("dist", ["a", "b"], "a-b"),
-    ("sumsq", ["a", "b"], "a*a+b*b"),
+    ("balance", ["a", "b"], "(a+b)/2"),
+    ("blend", ["a", "b"], "(a+b)/2"),
+    ("boost", ["n"], "n+n"),
+    ("brim", ["x"], "x+x"),
+    ("bump2", ["n"], "n+2"),
+    ("burst", ["n"], "n+n+n+n"),
+    ("chime", ["n"], "n+1"),
     ("combo", ["a", "b"], "a*b+a+b"),
-    ("scale", ["x", "f"], "x*f"),
-    ("halve", ["x"], "x/2"),
-    ("inc", ["n"], "n+1"),
+    ("crisp", ["x"], "x*x"),
+    ("cube", ["x"], "x*x*x"),
+    ("cubeln", ["x"], "x*x*x+x"),
     ("dec", ["n"], "n-1"),
-]
-
-# Infix spellings for the same abstract "functions" as FUNC_TEMPLATES: training pairs can use
-# either sum(a,b) or a plus b — both lower to the same Function.execute semantics in the runtime.
-OP_TEMPLATES = [
-    ("times", ["a", "b"], "a*b"),
+    ("dec2", ["n"], "n-2"),
+    ("dice", ["a", "b"], "a*b"),
+    ("diff", ["x", "y"], "x-y"),
+    ("dist", ["a", "b"], "a-b"),
+    ("dotpair", ["a", "b"], "a*b"),
+    ("double", ["x"], "x+x"),
+    ("double2", ["x"], "x*2"),
+    ("duplex", ["x"], "x+x"),
+    ("edge", ["a", "b"], "a*a+b*b"),
+    ("epic", ["a", "b", "c"], "(a+b+c)/3"),
+    ("fold4", ["a", "b", "c", "d"], "a+b+c+d"),
+    ("fourth", ["x"], "x*x*x*x"),
+    ("fuzzy", ["a", "b"], "(a+b)/2"),
+    ("geom3", ["a", "b", "c"], "a*b*c"),
+    ("glide", ["x"], "x/2"),
+    ("grip", ["a", "b"], "a-b"),
+    ("halve", ["x"], "x/2"),
+    ("halve3", ["x"], "x/3"),
+    ("hinge", ["a", "b"], "a*b+a+b"),
+    ("inc", ["n"], "n+1"),
+    ("invmix", ["a", "b"], "a*(0-b)"),
+    ("jolt", ["n"], "n+3"),
+    ("jump", ["n"], "n+2"),
+    ("layer", ["x"], "x*x+x"),
+    ("lift2", ["x"], "x+2"),
+    ("merge", ["a", "b"], "a+b"),
+    ("mid3", ["a", "b", "c"], "(a+b+c)/3"),
+    ("mix2", ["a", "b"], "(a+b)/2"),
+    ("mul", ["a", "b"], "a*b"),
+    ("mul3", ["a", "b", "c"], "a*b*c"),
+    ("neg8", ["x"], "0-x"),
+    ("negate", ["x"], "not x"),
+    ("nook", ["x"], "0-x-x"),
     ("over", ["a", "b"], "a/b"),
     ("plus", ["a", "b"], "a+b"),
-    ("minus", ["a", "b"], "a-b"),
+    ("poly2", ["x"], "x*x+x"),
+    ("prod", ["x", "y"], "x*y"),
+    ("quad", ["x"], "x*x*x*x"),
+    ("ramp", ["n"], "n+n+n+n"),
+    ("reach", ["x"], "1/x"),
+    ("ring", ["a", "b", "c"], "a+b+c"),
+    ("scale", ["x", "f"], "x*f"),
+    ("skew", ["a", "b", "c"], "a+b*2+c"),
+    ("slip", ["a", "b"], "a-b"),
+    ("spark", ["x"], "x*3"),
+    ("square", ["x"], "x*x"),
+    ("sub", ["a", "b"], "a-b"),
+    ("sum", ["a", "b"], "a+b"),
+    ("sumsq", ["a", "b"], "a*a+b*b"),
+    ("surge", ["n"], "n+n+n"),
+    ("swath", ["a", "b"], "a*a+b*b"),
+    ("sweep", ["a", "b"], "a/b"),
+    ("tap", ["x"], "x+x"),
+    ("thrice", ["n"], "n+n+n"),
+    ("thrice2", ["x"], "x*3"),
+    ("tilt", ["a", "b"], "a-b"),
+    ("times", ["a", "b"], "a*b"),
+    ("times8", ["x"], "x*8"),
+    ("triple", ["n"], "n+n+n"),
+    ("twin", ["x"], "x+x"),
+    ("twist", ["a", "b"], "a-b"),
+    ("wedge", ["a", "b"], "a*b-a"),
 ]
 
 
@@ -340,13 +391,13 @@ def _get_compiled_func_templates():
 
 
 def _get_compiled_op_templates():
-    """Compile OP_TEMPLATES body expressions into AST nodes (parallel to FUNC_TEMPLATES)."""
+    """Compile FUNC_TEMPLATES body expressions into AST nodes (parallel to FUNC_TEMPLATES)."""
     global _COMPILED_OP_TEMPLATES
     if _COMPILED_OP_TEMPLATES is not None:
         return _COMPILED_OP_TEMPLATES
 
     compiled = []
-    for name, params, body in OP_TEMPLATES:
+    for name, params, body in FUNC_TEMPLATES:
         lexer = basic.Lexer('<op_template>', body)
         body_tokens, error = lexer.make_tokens()
         if error:
@@ -506,7 +557,7 @@ def _try_expand_infix_op(segment: str, op_map: dict) -> Optional[str]:
 
 
 def _replace_infix_identifier_ops_in_expr(expr_text: str, op_map: dict) -> str:
-    """Inline (left IDENTIFIER:op right) using OP_TEMPLATES bodies."""
+    """Inline (left IDENTIFIER:op right) using FUNC_TEMPLATES bodies."""
     if not op_map:
         return expr_text
     out = expr_text
@@ -683,7 +734,8 @@ def generate():
                 res = interpreter.visit(ast.node, context)
                 symbol_table = context.symbol_table
                 if res.error:
-                    print(f'Interpretation is invalid!: {res.error.as_string()}')
+                    if 'zero' not in res.error.as_string():
+                        print(f'Interpretation is invalid!: {res.error.as_string()}')
                     invalid_count += 1
                     is_valid = False
                     break
@@ -697,7 +749,7 @@ def generate():
                     if res.value:
                         sample.symbols['_output_list'].append(res.value)
                 else:
-                    print('Encodings are too long...')
+                    #print('Encodings are too long...')
                     invalid_count += 1
                     is_valid = False
                     break

@@ -1,6 +1,6 @@
 import torch
 
-num_training_samples = 2_000_000  # 5_000_000
+num_training_samples = 1_000_000  # 5_000_000
 batch_size = 64  # 32
 block_size = 64  # 256
 max_iters = 35_001  # 5_001
