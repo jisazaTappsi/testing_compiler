@@ -220,3 +220,6 @@ frontend/.nuxt
 frontend/node_modules
 frontend/dist
 frontend/.output/
+
+# Local AWS profiles/credentials (use AWS_CONFIG_FILE / AWS_SHARED_CREDENTIALS_FILE)
+.aws/
