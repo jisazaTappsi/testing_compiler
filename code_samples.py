@@ -1,15 +1,12 @@
 import statistics
-
 import pandas as pd
 
 import data
 import basic
-import tokens
-from tokens import *
 from util import *
 from basic import Parser
-from code_train import CrossAttentionTransformer, block_size
 from data_generator import print_program
+from code_train import CrossAttentionTransformer
 
 # Set random seed for reproducibility
 torch.manual_seed(42)
@@ -28,38 +25,6 @@ def get_sample_val_data(num):
     random_val_df = val_df.iloc[random_val_ids]
 
     return random_val_df
-
-
-def get_hand_made_data():
-    rows = []
-    hand_samples = ['2456+2235', '3544*4567+6567/7889', '6899/7667', '1899*2908', '1959.14 - 3257', '7758 * 7000 + 6000 ']
-    hand_samples += ['2+2', '3*4+6/7', '6/7', '1*2', '1.1 - 3', '7 * 7 + 6 ']
-    #hand_samples = ['6.12++(+(412.41/2)/+(4*1420))']
-
-    for idx, hand_sample in enumerate(hand_samples):
-        lexer = basic.Lexer('<stdin>', hand_sample)
-        token_list, _ = lexer.make_tokens()
-        lexer_text = ' '.join(t.__repr__() for t in token_list)
-
-        ast = basic.Parser(token_list).parse()
-        interpreter = basic.Interpreter()
-        ctx = basic.Context('<program>')
-        ctx.symbol_table = basic.get_symbol_table()
-        res = interpreter.visit(ast.node, ctx)
-
-        rows.append(
-            {
-                'lex_text': lexer_text,
-                'ast_text': f'{tokens.SOF} {ast.node} {tokens.EOF}',
-                'result': res.value,
-                'text': hand_sample,
-                'x_in': data.add_pad_tokens_and_trim(data.encode(lexer_text, {}), block_size),
-                'x_out': data.add_pad_tokens_and_trim(data.encode(f'{tokens.SOF} {ast.node} {tokens.EOF}', {}), block_size),
-                'id': idx,
-            }
-        )
-
-    return pd.DataFrame(rows)
 
 
 def sample_decode(my_data, merges):
@@ -91,7 +56,6 @@ def run(num_samples=100):
 
     # Load data and merges
     val_samples = get_sample_val_data(num=num_samples)
-    #val_samples = get_hand_made_data()
     lex_merges, ast_merges = data.get_merges()
 
     model = CrossAttentionTransformer()
