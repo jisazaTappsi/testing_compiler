@@ -45,6 +45,8 @@ def main() -> None:
         os.environ["AWS_SHARED_CREDENTIALS_FILE"] = str(cred)
         os.environ["AWS_PROFILE"] = "latentlang"
 
+    os.environ.setdefault("NUXT_PUBLIC_API_BASE", "https://api.latentlang.com")
+
     subprocess.run(
         ['bash', '-lc', 'source "$NVM_DIR/nvm.sh" && nvm use 20 && npm run generate'],
         cwd=frontend_dir,
